@@ -5,6 +5,8 @@ services:
         build:
             context: .
             dockerfile: DockerfileNB
+        # devices:
+            # - "/dev/dri:/dev/dri"
         working_dir: /duckietown
         networks:
         - duckietown-docker-net
@@ -15,11 +17,13 @@ services:
         - ./utils:/duckietown/utils
         - ./custom:/duckietown/custom
         - ./custom_ws:/duckietown/custom_ws
+        # - /tmp/.X11-unix:/tmp/.X11-unix 
         expose:
         - "8888"
         ports:
         - "8888:8888"
-
+        # environment:
+        # - DISPLAY=:0
 
 networks:
     duckietown-docker-net:

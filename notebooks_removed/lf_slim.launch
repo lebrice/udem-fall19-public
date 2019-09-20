@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<launch>
+    <!-- start basic args -->
+    <arg name="veh" default="baseline"/>
+    <arg name="param_file_name" default="default" />
+    <arg name="verbose" default="true" />
+    <arg name="loc" default="-1"/>
+    <arg name="line_detector_param_file_name" default="$(arg param_file_name)"/>
+
+    <arg name="lane_following" default="true"/>
+    <arg name="/lane_following/line_detection" default="true"/>
+    <arg name="/lane_following/lane_filter" default="true"/>
+    <arg name="/lane_following/ground_projection" default="true"/>
+    <arg name="/lane_following/lane_controller" default="true"/>
+
+    <arg name="inverse_kinematics" default="true"/>
+
+<!-- 
+Here are the modifications I performed on the lf_slim.launch file:
+
+In order to simplify debugging this, I chose to establish a convention
+whereby I always only remap the subscribers such that they use the topic name chosen by the publisher.
+This helped me greatly in making sense of this file.
+-->
+    <group>
+<!-- 1- Added a remap inside the group containing the gymdt node.
+    Since the gymdt node is subscribing to the wheels_cmd event, it needs to point to that event on the inverse_kinematics node. (the publisher)-->
+        <!-- START ADDED -->
+        <remap from="$(arg veh)/wheels_driver_node/wheels_cmd" to="/$(arg veh)/inverse_kinematics_node/wheels_cmd" />
+        <!-- END ADDED -->
+        <node name="gymdt" pkg="gymdt" type="gymdt_node.py" />
+    </group>
+
+    <group if="$(arg lane_following)">
+
+        <!-- Line Detector -->
+        <group if="$(arg /lane_following/line_detection)">
+            <remap from="line_detector_node/transform" to="anti_instagram_node/transform"/>
+            <remap from="line_detector_node/corrected_image/compressed" to="corrected_image/compressed"/>
+            <include file="$(find line_detector)/launch/line_detector_node.launch">
+                <arg name="veh" value="$(arg veh)"/>
+                <!-- NOTE: "line_detector_param_file_name" as special case -->
+                <arg name="param_file_name" value="$(arg line_detector_param_file_name)"/>
+                <arg name="verbose" value="$(arg verbose)" />
+            </include>
+        </group>
+
+        <!-- Ground Projection -->
+        <group if="$(arg /lane_following/ground_projection)">
+<!-- 2- Connect the line detection and groud projection with the segment_list topic: -->
+            <!-- START ADDED -->
+            <remap from="ground_projection/lineseglist_in" to="line_detector_node/segment_list"/>
+            <!-- END ADDED -->
+            <include file="$(find ground_projection)/launch/ground_projection.launch">
+                <arg name="veh" value="$(arg veh)"/>
+                <arg name="param_file_name" value="$(arg param_file_name)"/>
+            </include>
+        </group>
+
+        <!-- Lane Filter -->
+        <group if="$(arg /lane_following/lane_filter)">
+            <remap from="lane_filter_node/segment_list" to="ground_projection/lineseglist_out"/>
+<!-- 3- Connect the lane controller's car_cmd topic to the lane_filter, which requires it. -->
+            <!-- START ADDED -->
+            <remap from="lane_filter_node/car_cmd" to="lane_controller_node/car_cmd"/>
+            <!-- END ADDED -->
+            <include file="$(find lane_filter)/launch/lane_filter_node.launch">
+                <arg name="veh" value="$(arg veh)"/>
+                <arg name="param_file_name" value="$(arg param_file_name)"/>
+            </include>
+        </group>
+        
+        <!-- Lane controller -->
+        <group if="$(arg /lane_following/lane_controller)">
+            <remap from="lane_controller_node/lane_pose" to="lane_filter_node/lane_pose"/>
+            <remap from="lane_controller_node/wheels_cmd_executed" to="wheels_driver_node/wheels_cmd_executed" />
+            <remap from="lane_controller_node/actuator_limits" to="inverse_kinematics_node/actuator_limits" />
+
+            <include file="$(find lane_control)/launch/lane_controller_node.launch">
+                <arg name="veh" value="$(arg veh)"/>
+                <arg name="param_file_name" value="$(arg param_file_name)"/>
+            </include>
+        </group>
+
+        <!-- Inverse Kinematic Node -->
+        <group if="$(arg inverse_kinematics)">
+            <remap from="inverse_kinematics_node/car_cmd" to="lane_controller_node/car_cmd"/>
+<!-- 4- Remove the remap within the inverse_kinematic node, following the convention described above (and following change #1) -->
+            <!-- START REMOVED -->            
+            <!-- <remap from="inverse_kinematics_node/wheels_cmd" to="wheels_driver_node/wheels_cmd" /> -->
+            <!-- END REMOVED -->
+            <include file="$(find dagu_car)/launch/inverse_kinematics_node.launch">
+                <arg name="veh" value="$(arg veh)"/>
+            </include>
+        </group>
+        <!-- <node name="save_video" pkg="image_view" type="video_recorder">
+            <remap from="image" to="/baseline/corrected_image/compressed" />
+        </node> -->
+        <!-- <node name="save_images" pkg="image_view" type="image_saver">
+            <remap from="image" to="/baseline/line_detector/image_with_lines" />
+        </node> -->
+        <!-- <node name="extract" pkg="image_view" type="extract_images" respawn="false" required="true" output="screen" cwd="ROS_HOME">
+            <remap from="image" to="/baseline/line_detector/image_with_lines"/>
+        </node> -->
+    </group>
+    <!-- End Lane Control -->
+</launch>

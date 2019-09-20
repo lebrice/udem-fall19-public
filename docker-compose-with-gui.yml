@@ -1,0 +1,32 @@
+version: '3'
+services:
+    duckietown-notebook:
+        image: duckietown/dt-notebook:udem
+        build:
+            context: .
+            dockerfile: DockerfileNB
+        devices:
+            - "/dev/dri:/dev/dri"
+        working_dir: /duckietown
+        networks:
+        - duckietown-docker-net
+        volumes:
+        - ./catkin_ws:/duckietown/catkin_ws
+        - ./simulation:/duckietown/simulation
+        - ./notebooks:/duckietown/notebooks
+        - ./utils:/duckietown/utils
+        - ./custom:/duckietown/custom
+        - ./custom_ws:/duckietown/custom_ws
+        - /tmp/.X11-unix:/tmp/.X11-unix 
+        expose:
+        - "8888"
+        ports:
+        - "8888:8888"
+        environment:
+        - DISPLAY=:0
+
+networks:
+    duckietown-docker-net:
+
+
+        

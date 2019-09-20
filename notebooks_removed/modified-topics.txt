@@ -1,0 +1,30 @@
+Fabrice Normandin
+
+Here are the modifications I performed on the lf_slim.launch file:
+
+In order to simplify debugging this, I chose to establish a convention
+whereby I always only remap the subscribers such that they use the topic name chosen by the publisher.
+This helped me greatly in making sense of this file.
+
+1- Added a remap inside the group containing the gymdt node.
+    Since the gymdt node is subscribing to the wheels_cmd event, it needs to point to that event on the inverse_kinematics node. (the publisher)-->
+    <!-- START ADDED -->
+    <remap from="$(arg veh)/wheels_driver_node/wheels_cmd" to="/$(arg veh)/inverse_kinematics_node/wheels_cmd" />
+    <!-- END ADDED -->
+
+
+2- Connect the line detection and groud projection with the segment_list topic: -->
+    <!-- START ADDED -->
+    <remap from="ground_projection/lineseglist_in" to="line_detector_node/segment_list"/>
+    <!-- END ADDED -->
+
+
+3- Connect the lane controller's car_cmd topic to the lane_filter, which requires it. -->
+    <!-- START ADDED -->
+    <remap from="lane_filter_node/car_cmd" to="lane_controller_node/car_cmd"/>
+    <!-- END ADDED -->
+
+4- Remove the remap within the inverse_kinematic node, following the convention described above (and following change #1) -->
+    <!-- START REMOVED -->            
+    <!-- <remap from="inverse_kinematics_node/wheels_cmd" to="wheels_driver_node/wheels_cmd" /> -->
+    <!-- END REMOVED -->

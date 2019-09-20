@@ -1,0 +1,10 @@
+<launch>
+    <node pkg="rosbag" type="play" name="rosbag" required="true" args="/duckietown/notebooks/images.bag"/>
+    <!-- <node name="save_video" pkg="image_view" type="video_recorder">
+        <remap from="image" to="/baseline/line_detector/image_with_lines" />
+    </node> -->
+    <!-- <node name="extract" pkg="image_view" type="extract_images" respawn="false" required="true" output="screen" cwd="ROS_HOME"> -->
+    <node name="extract" pkg="image_view" type="extract_images" respawn="false" required="true" output="screen" cwd="ROS_HOME">
+        <remap from="image" to="/baseline/corrected_image"/>
+    </node>
+</launch>
