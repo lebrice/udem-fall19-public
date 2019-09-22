@@ -1,0 +1,87 @@
+1.A: [1.77018667 0.59283628]
+1.B: [ 0.49497475 -0.21213203]
+2: right_rate: 1.6844336196330354, left rate: 1.8511002862997021 
+4: Code (before) and in for-loop: 
+	 ## setup code (before for loop)
+	 
+	 max_speed = 0.5
+	 total_time = total_timesteps * dt
+	 max_trace_length = total_time * max_speed
+	 
+	 # curve_length = (2 + np.pi) * d_radius
+	 # hence: d_radius = curve_length / (2 + np.pi)
+	 max_radius = max_trace_length / (2 + np.pi)
+	 d_radius = max_radius
+	 
+	 steps_needed_to_trace_straight_line = int(total_timesteps * (2 /(2 + np.pi)))
+	 steps_needed_to_trace_curve = int(total_timesteps * (np.pi /(2 + np.pi)))
+	 time_needed_to_trace_curve = steps_needed_to_trace_curve * dt
+	 
+	 end_straight_line = steps_needed_to_trace_straight_line
+	 turn_inplace = steps_needed_to_trace_straight_line + 1
+	 
+	 print(
+	     "radius of 'D' is", d_radius,
+	     "going straight for ", steps_needed_to_trace_straight_line, "steps,",
+	     "then turning instantaneously 90 degrees to the right for one timestep,",
+	      "and then doing a curve for ", steps_needed_to_trace_curve, " steps.",
+	     "Total timesteps: ", (steps_needed_to_trace_straight_line + 1 + steps_needed_to_trace_curve)
+	 )
+	 ##
+	 
+	 for t in range(total_timesteps):
+	     
+	     ### Modify code here depending on t (you can use if statements)
+	    
+	     if t < end_straight_line:
+	         # going straight along the positive X axis
+	         omega = 0
+	         v = max_speed
+	     elif t == end_straight_line:
+	         # turn the duckie to the right 90 degrees
+	         omega = -(np.pi / 2) / dt
+	         v = 0
+	     else:
+	         # move forward, drawing a curve back to the origin
+	         omega = -np.pi / time_needed_to_trace_curve
+	         v = max_speed
+	     
+	     ###
+	 
+4.Bonus: Code (before) and in for-loop: 
+	 ## setup code (before for loop)
+	 
+	 max_speed = 0.5
+	 num_petals = 8
+	 timesteps_per_petal = 100
+	 num_petals_done = 0
+	 
+	 petal_timesteps = num_petals * timesteps_per_petal
+	 timesteps_left = total_timesteps - petal_timesteps
+	 
+	 for t in range(total_timesteps):
+	     ### Modify code here depending on t (you can use if statements)
+	     if t < num_petals * timesteps_per_petal:
+	         omega = (2 * np.pi) / (timesteps_per_petal-1) / dt
+	         v = max_speed
+	         if t % timesteps_per_petal == 0:
+	             # turn in-place a bit.
+	             print(t, "turning: ", cur_angle %(360))
+	             omega = (np.pi / 4) / dt
+	             v = 0
+	     elif num_petals * timesteps_per_petal == t: 
+	         # done making 8 petals, turn to face neg Y axis.
+	         print("Done making petals. Cur angle:", cur_angle % 360)
+	         omega = np.deg2rad(-90 - cur_angle) / dt # get to -90 degrees.
+	         v = 0
+	     else:
+	         if (t - num_petals * timesteps_per_petal) % (timesteps_left/3) == 1:
+	             print("timesteps left:", timesteps_left)
+	             omega = np.deg2rad(60) / dt
+	             v = max_speed / 2
+	         else:
+	             omega = 0
+	             v = max_speed
+	     
+	     ###
+	 
