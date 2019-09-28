@@ -2,9 +2,17 @@ import numpy as np
 
 
 class Controller():
-    def __init__(self):
+    def __init__(self, k_p_dist=10.0, k_d_dist=0., k_p_angle=10.0, k_d_angle=0):
         self.gain = 2.0
         pass
+        self.last_dist: float = None
+        self.last_angle: float = None
+        
+        self.k_p_angle = k_p_angle
+        self.k_d_angle = k_d_angle
+        self.k_p_dist = k_p_dist
+        self.k_d_dist = k_d_dist
+#         print(self.k_p_dist, self.k_d_dist, self.k_p_angle, self.k_d_angle)
 
     def angle_control_commands(self, dist, angle):
         # Return the angular velocity in order to control the Duckiebot so that it follows the lane.
@@ -23,7 +31,25 @@ class Controller():
         # YOUR CODE HERE
         #
         #######
+        if self.last_angle is None:
+            self.last_angle = angle
+        if self.last_dist is None:
+            self.last_dist = dist
         
+        e_angle = angle
+        d_angle = (self.last_angle - angle)
+
+        e_dist = dist
+        d_dist = (self.last_dist - dist)
+        
+        self.last_angle = angle
+        self.last_dist = dist
+        
+        omega += self.k_p_angle * e_angle
+        omega += self.k_d_angle * d_angle
+        
+        omega += self.k_p_dist * e_dist
+        omega += self.k_d_dist * d_dist
         return  omega
 
     def pure_pursuit(self, env, pos, angle, follow_dist=0.25):
