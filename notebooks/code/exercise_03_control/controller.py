@@ -2,6 +2,12 @@ import numpy as np
 
 def wrap(angle: float) -> float:
     """Takes in any angle (in radians), and expresses it inside the [-np.pi, np.pi] range.
+    
+    Arguments:
+        angle {float} -- An angle in radians
+    
+    Returns:
+        float -- The angle projected within the range (-np.pi, np.pi]
     """
     two_pi = 2 * np.pi
     angle %= two_pi
@@ -70,6 +76,14 @@ class Controller():
         
         omega += self.k_p_dist * e_dist
         omega += self.k_d_dist * d_dist
+
+        # cross-track error and angle error:
+        cross_track_error = dist
+        angle_error = angle
+
+        self.points["cross_track_error"].append(cross_track_error)
+        self.points["angle_error"].append(angle_error)
+
         return  omega
 
     def pure_pursuit(self, env, pos, angle, follow_dist=0.25):

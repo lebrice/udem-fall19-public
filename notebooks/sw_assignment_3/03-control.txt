@@ -72,9 +72,25 @@ Explain, qualitatively, the difference between the three terms.
     to guarantee its stability.
 
 - Recall the lecture notes about PP controllers. How does the look-ahead distance affect performance?
-    The look-ahead distance affects the curvature of the robot's instantaneous trajectory.
+    The look-ahead distance affects the curvature of the robot's overall trajectory.
+    Therefore, having a large look-ahead distance makes the curve smoother, while a small look-ahead distance allows sharper bends in the path.
     
 - What does a small look-ahead distance prioritize? What about a larger one?
     A small look-ahead distance prioritizes following the local (fine-grain) structure of the trajectory.
     A large look-ahead distance prioritizes following the global, large-scale trajectory, while perhaps cutting corners.
 
+
+- Lastly, experiment with the lookup_distance hyperparameter;
+  does the lowering /raising this value match your hypothesis from earlier in this exercise?
+
+    Yes and no. At first, because of the provided implementation, which approximates the curve_point by moving forward 'lookup_distance'
+    from the 'closest_point' in the direction of 'closest_tangent', it is very unlikely that when placed in front of a sharp turn, the closest_point would end up on the curve past that corner.
+    Hence, instead of cutting the corners like I predicted earlier, the robot instead stays in the lane, because its effective lookup_distance is reduced in the previously-mentioned procedure.
+    
+    However, after implementing a different approach for the curve_point, which instead takes small steps on the curve
+    and returns the first curve_point which is at least 'lookup_distance' away from the closest position, we observe precisely the type of behaviour that was originally predicted:
+    - With raising the 'lookup_distance' to 0.5,  the robot 'crashes' by cutting the first corner.
+    - Lowering this value from its default value of 0.25 to 0.10 provokes some oscillation in the robot trajectory.
+    
+    Finally, by scaling the lookup distance L by the velocity, the resulting controller can go very fast in the straight segments, and is able to slow down to take corners.
+    Note that some exponential smoothing with p=0.8 was applied to the lookup_distance, to prevent the robot's motion being too jerky.
