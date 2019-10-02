@@ -10,6 +10,7 @@ def wrap(angle: float) -> float:
     # angle is now inside [0, 2pi]
     if angle > np.pi:
         angle -= two_pi
+    assert (- np.pi) < angle <= np.pi
     return angle
 
 
@@ -29,6 +30,9 @@ class Controller():
         self.k_v = 0.5
         import collections
         self.points = collections.defaultdict(list)
+
+        self.lookup_distance = 0.25
+
 
     def angle_control_commands(self, dist, angle):
         # Return the angular velocity in order to control the Duckiebot so that it follows the lane.
@@ -78,80 +82,103 @@ class Controller():
         #     v: linear veloicy in m/s.
         #     omega: angular velocity, in rad/sec. Right is negative, left is positive.
         
+
         
         closest_curve_point = env.unwrapped.closest_curve_point
         
         # Find the curve point closest to the agent, and the tangent at that point
         closest_point, closest_tangent = closest_curve_point(pos, angle)
+    
+        def find_curve_point_old():
+            """
+            Moved the given code from the instructions into this function.
+            """
 
-        iterations = 0
-        
-        lookup_distance = follow_dist
-        multiplier = 0.5
-        curve_point = None
-        
-        while iterations < 10:            
-            ########
-            #
-            #TODO 1: Modify follow_point so that it is a function of closest_point, closest_tangent, and lookup_distance
-            #
-            ########
-            def find_follow_point(closest_point, closest_tangent, lookup_distance):
+            lookup_distance = follow_dist
+            multiplier = 0.5
+            curve_point = None
+            terations = 0
+            while iterations < 10:
+                ########
+                #
+                #TODO 1: Modify follow_point so that it is a function of closest_point, closest_tangent, and lookup_distance
+                #
+                ########                    
                 follow_point = closest_point + lookup_distance * closest_tangent
-                # print("closest_point:", closest_point , "closesest_tangent", closest_tangent, "lookup_distance", lookup_distance)
-                return follow_point
                 
-            follow_point = find_follow_point(closest_point, closest_tangent, lookup_distance)
+                curve_point, _ = closest_curve_point(follow_point, angle)
+
+                # If we have a valid point on the curve, stop
+                if curve_point is not None:
+                    break
+
+                iterations += 1
+                lookup_distance *= multiplier
+            return curve_point
+
+        def find_curve_point_better(follow_dist, step_size=0.05) -> float:
+            """
+            We take baby steps along the curve, and we return the first point along
+            that curve that is at least L distance away from the robot.
+            """
+            def distance_mag(a, b):
+                diff = a-b
+                return (diff).dot(diff)
             
-            curve_point, _ = closest_curve_point(follow_point, angle)
+            # Start off from closest_point
+            curve_point, tangent = closest_point, closest_tangent
+            distance_from_robot_mag = distance_mag(pos, curve_point)
+            follow_dist_mag = follow_dist**2
 
-            # If we have a valid point on the curve, stop
-            if curve_point is not None:
-                break
+            max_iterations = 10
+            iterations = 0
+            while distance_from_robot_mag < follow_dist_mag and iterations < max_iterations:
+                # take a small step forward from the current curve_point
+                forward_projection = curve_point + tangent * step_size
 
-            iterations += 1
-            lookup_distance *= multiplier
-        ########
-        #
-        #TODO 2: Modify omega
-        #
-        ########
-        print("curve point:", curve_point, "pos:", pos)
-        robot_to_curve_point = curve_point - pos
-        # print("local:", curve_point_local)
-        # sin_alpha = sin(theta_g - angle)
-        # sin(A - B) = sinAcosB-cosAsinB
-        # hypothenuse = np.sqrt(robot_to_curve_point[0] ** 2 + robot_to_curve_point[2] ** 2)
-        # sin_theta_g = robot_to_curve_point[0] / hypothenuse
-        # cos_theta_g = robot_to_curve_point[2] / hypothenuse
-        # sin_alpha_1 = sin_theta_g * np.cos(angle) - cos_theta_g * np.sin(angle)
-        
+                # Find the curve point closest to the forward projection, and the tangent at that point
+                next_curve_point, next_tangent = closest_curve_point(forward_projection, angle)
+                if curve_point is None:
+                    break
+                curve_point, tangent = next_curve_point, next_tangent
+                # recalculate the distance
+                distance_from_robot_mag = distance_mag(curve_point, pos)
+
+                iterations += 1
+
+            return curve_point
+
+        # curve_point = find_curve_point_old()
+        curve_point = find_curve_point_better(follow_dist=self.lookup_distance, step_size=0.05)
+
         robot_to_curve_point = curve_point - pos
         robot_to_curve_point_angle = np.arctan2(-robot_to_curve_point[2], robot_to_curve_point[0])
         alpha = robot_to_curve_point_angle - angle
         alpha = wrap(alpha)
-
         sin_alpha = np.sin(alpha)
         
-        self.points["alpha"].append(alpha)
-        self.points["sin_alpha"].append(sin_alpha)
         # need to tune this.
-        self.k_l = 0.5
-        self.k_v = 1.0
+        self.k_l = 0.25
+        self.k_v = 0.25
         
-        max_speed = 0.5
 
-        v = min(self.k_v / abs(alpha), max_speed)
+        v = self.k_v / abs(alpha)
         
-        # v = abs(self.k_v / alpha)
-        lookup_d = self.k_l * v
+        # clamp the commanded speed
+        max_speed = 2.0
+        v = min(v, max_speed)
+        
+        lookup_distance = self.k_l * v
+        p = 0.8
+        
+        # # without smoothing.
+        # self.lookup_distance = lookup_distance
+        
+        # With smoothing (prevents jerky motion)
+        self.lookup_distance = p * self.lookup_distance + (1-p) * lookup_distance
+        self.points["lookup_distance"].append(self.lookup_distance)
 
-        omega = sin_alpha / lookup_d 
-
-        print("v", v)
-        print("omega", omega)
-        print("alpha:", alpha)
-
+        omega = sin_alpha / self.lookup_distance
         # cross-track error
         cross_track_error = sin_alpha * np.linalg.norm(robot_to_curve_point)
         self.points["cross_track_error"].append(cross_track_error)
@@ -170,12 +197,17 @@ class Controller():
     
     def plot(self):
         import matplotlib.pyplot as plt
-
+        import math
+        num_plots = len(self.points.keys())
+        
+        fig = plt.figure(figsize=(15, 12))
         for i, (title, list_of_points) in enumerate(self.points.items()):
+            plt.subplot(2, math.ceil(num_plots / 2), i+1)
             data_np = np.asarray(list_of_points)
             plt.plot(data_np)
-
-        plt.legend(self.points.keys(), loc="upper right")
-        plt.title("Fabrice Normandin")
+            plt.title(title)
+        # plt.legend(self.points.keys(), loc="upper right")
+        plt.suptitle("Fabrice Normandin")
+        
 
 
