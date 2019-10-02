@@ -1,0 +1,80 @@
+Fabrice Normandin. SW assignment #3: Control.
+
+Explain, qualitatively, the difference between the three terms.
+- The P term is portional to the error. (K_p e(t))
+- the I term uses an accumulation (an integration) of the error term over time (int_{0}^{T}{K_i e(t)})
+- The D term is proportional to the change of the error over time (its derivative). (d\dt(K_d e(t)))
+1. P:
+    P controllers apply a correction that is proportional to the error.
+    One example of this (found on Wikipedia) is the float valve inside a toilet reservoir.
+    When the water level rises, the lever closes the valve and shuts off the input flow.
+    Another example (from https://controlguru.com/the-p-only-control-algorithm/) is a very crude cruise-control system.
+    As the speed of the car deviates from the reference value, a correction is applied to the gas intake of the engine, proportion to the error.
+    The constant K_p regulates the the magnitude of the response compared to the error.
+2. PI:
+    Here an additional term is added which uses an integration of the error over time.
+    The term has the form k_i \int_{0}^{T} e(t) dt (or also K_i / delta_t * \int_{0}^{T} e(t) dt), with delta_t being the integration timestep length.
+    The addition of this term allows the elimination of steady-state error (or offset), which was one of the big limitations of the P controller (https://controlguru.com/pi-control-of-the-heat-exchanger/)
+    According to (https://controlstation.com/pi-control/), some of the common uses of the PI controller (which is one of the most commonly used controllers) includes:
+    liquid flow control, heat exchanger temperature control, and steam pressure control. 
+3. PD:
+    Proportional-Derivative controllers include a D term which depends on the change of the error over time.
+    In order to avoid having "derivative kick" (https://controlguru.com/pid-control-and-derivative-on-measurement/), the derivative term is
+    written as the opposite derivate of the present value, rather than the derivative of the error, which might change abruptly when the target value chanes.
+    A common example of this type of controller is the suspension of a car, (as described in http://www.matthewpeterkelly.com/tutorials/pdControl/index.html)
+    where the spring exerts a force proportial to the deflection (error), and the damper opposes motion, exerting a force proportional to the change in position of the spring (the derivative of the error) 
+4. ID:
+    This controller doesn't seem to exist. According to https://robotics.stackexchange.com/questions/2925/why-does-a-id-controller-not-exist?fbclid=IwAR3IkeSSbte1cJrAHUHf3vlw-dXdf6yD0y-VcYRiT62rUpp91X2lXwevKzQ,
+    The reason for this is that without a term proportional to the error, there would be no way of knowing if the system is currently in its desired state.
+5. PID:
+    Here we add both a D and an I term to the P-only controller. The I term tends to augment auscillation in the system, while the D term resists change and provides a dampening effect.
+    From my understanding, PID controllers are used pretty much everywhere, in a wide variety of applications. According to Wikipedia,
+    the first uses of PID controllers were for automatic steering systems for ships in the 1920's.
+
+- Describe the method you used. What kind of controller is it?
+    I first implemented a simple PD controller, with the following parameters:
+        k_p_dist:  constant of the P term w.r.t the dist input
+        k_p_angle: constant of the P term w.r.t the angle input
+        k_d_dist:  const of the D term w.r.t. the dist input
+        k_d_angle: constant of the D term w.r.t. the angle input
+    
+    Then, I set the derivative parameters `k_d_dist` and `k_d_dist` to zero, effectively converting this model to a P controller.
+    
+    The values of `k_p_dist` and `k_p_angle` were both set to 10.
+    This controller performed pretty well, being able to stay in lane without any significant oscillation. The total_reward was equal to 276.39 with these parameters.
+
+- (Again) Describe the method you used. What kind of controller is it?
+    This time, by allowing non-zero values for `k_d_dist` and `k_d_angle`, the above system became a PD controller, rather than a P controller.
+    In order to automate this search process, I implemented a simple A* search, which varies the values of each of the four parameters and return the best combination found after a given number of explorations.
+    Interestingly, while searching, the reward signal became very negative! For instance:
+    
+    When using the following parameters: (k_p_dist=10, k_d_dist=0, k_p_angle=15.898240000000003, k_d_angle=-33.616)
+    the total reward would be equal to -1321.7744797146122!!!
+    After closer inspection, the robot seemed to be jerking constantly on the line, which seems to have provided a negative error value.
+    
+    Thereafter, I decieded to use the absolute value of the total_reward as the priority index of the A* search algorithm.
+    This would therefore search for parameter combinations which give results close to zero.
+    
+- Discuss the differences (both in terms of algorithm and performance) between the two.
+    The PD controller uses an additional term based on the derivative of the error signal (therefore equivalent to the negative derivative of the current value of the input).
+    The performance of the PD controller, assuming it is well tuned, performs better than the P controller, 
+    because it is able to correct the offset that arises in the P-only controller.
+     
+- Do you see any qualitative differences in the driving? Why or why not?
+    There seems to be a slight difference in terms of driving of the PD and P controllers,
+    in that the PD controller is able to respond to sudden turns more smoothly.
+    This is consistent with the theory of PD controllers, where the D term is able
+    to prevent the overshoot and potential oscillations that can typically occur in P-only controllers.
+
+- While robust, general, and simple, PID controllers also have limitations. What are some failure cases of PID controllers?
+    PID controllers can be very difficult to tune properly, given the larger number of parameters compared to P or PD controllers.
+    Furthermore, the PID controller has only access to the current value of the error, making it unable to take preventive measures
+    to guarantee its stability.
+
+- Recall the lecture notes about PP controllers. How does the look-ahead distance affect performance?
+    The look-ahead distance affects the curvature of the robot's instantaneous trajectory.
+    
+- What does a small look-ahead distance prioritize? What about a larger one?
+    A small look-ahead distance prioritizes following the local (fine-grain) structure of the trajectory.
+    A large look-ahead distance prioritizes following the global, large-scale trajectory, while perhaps cutting corners.
+
