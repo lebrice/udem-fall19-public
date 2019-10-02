@@ -208,6 +208,3 @@ class Controller():
             plt.title(title)
         # plt.legend(self.points.keys(), loc="upper right")
         plt.suptitle("Fabrice Normandin")
-        
-
-
