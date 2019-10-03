@@ -1,7 +1,9 @@
+from __future__ import annotations
 import random
 import math
 import matplotlib.pyplot as plt
-
+import numpy as np
+from typing import *
 
 class RRT_planner:
     """
@@ -11,6 +13,7 @@ class RRT_planner:
     class Node:
         """
         Node for RRT
+        TODO: move this out of the RRT_planner class.
         """
         def __init__(self, x, y):
             self.x = x
@@ -18,6 +21,71 @@ class RRT_planner:
             self.parent = None
             self.path_x = []
             self.path_y = []
+
+        def to(self, other: Node) -> Tuple[float, float]:
+            """Returns the distance and angle between this node and `other`.
+            
+            Arguments:
+                other {Node} -- Destination node
+            
+            Returns:
+                Tuple[float, float] -- The distance and angle in radians between `self` and `other`.
+            """
+            dx = other.x - self.x
+            dy = other.y - self.y
+            d = math.sqrt(dx ** 2 + dy ** 2)
+            angle = math.atan2(dy, dx)
+            return d, angle
+
+        def straight_path_to(self: Node, end_node: Node, step_size: float) -> Tuple[List[float], List[float]]:
+            """Returns the coordinates of the straight line path between `self` and `end_node`.
+            
+            Arguments:
+                start_node {Node} -- The starting node
+                end_node {Node} -- The end node
+                step_size {float} -- The step size along the path
+            
+            Returns:
+                (path_x, path_y): Tuple[List[float], List[float]] -- the X and Y coordinates of the points along the path.
+            """
+            dist, angle = self.to(end_node)
+
+            step_x = np.cos(angle) * step_size
+            path_x = np.arange(self.x, end_node.x, step_x).tolist()
+            path_x.append(end_node.x)
+
+            step_y = np.sin(angle) * step_size
+            path_y = np.arange(self.y, end_node.y, step_y).tolist()
+            path_y.append(end_node.y)
+
+            return path_x, path_y
+
+        def collides_with(self, obstacleList: List[Tuple[float, float, float]]) -> bool:
+            """Crude collision detection. Returns wether the path to get from the parent node to this node collides with any of the given obstacles. 
+            
+            Arguments:
+                obstacleList {List[Tuple[float, float, float]]} -- List of (x, y, size) for each obstacle
+            
+            Returns:
+                bool -- Wether the path to this node collided with any of the obstacles.
+            """
+            # Returns True if collision between a node and at least one obstacle in obstacleList
+            for (ob_x, ob_y, size) in obstacleList:
+                dist_x = (ob_x - x for x in self.path_x)
+                dist_y = (ob_y - y for y in self.path_y)
+                distance_magnitudes = (dx * dx + dy * dy for (dx, dy) in zip(dist_x, dist_y))
+                min_distance_magnitude = (size / 2) ** 2
+                collided = (d <= min_distance_magnitude for d in distance_magnitudes)
+                if any(collided):
+                    return True
+            return False
+        
+        def lineage(self):
+            """yields all the parents of this node up to the root."""
+            node = self
+            while node.parent is not None:
+                yield node.parent
+                node = node.parent
 
     def __init__(self, start, goal, list_obstacles, rand_area,
                  max_branch_length=0.5, path_res=0.1, goal_sample_rate=5, max_iter=1000):
@@ -51,13 +119,21 @@ class RRT_planner:
 
         self.list_nodes = [self.start_node]
         for it in range(self.max_iter):
-            new_node = self.Node(0, 0)
+            # new_node = self.Node(0, 0)
             ####### 
             # Objective: create a valid new_node according to the RRT algorithm and append it to "self.list_nodes"
             # You can call any of the functions defined lower, or add your own.
 
             # YOUR CODE HERE
-
+            random_node = self.get_random_node()
+            closest_node = self.get_node_closest_to(random_node)
+            new_node = self.extend_towards(closest_node, random_node)
+            collision = new_node.collides_with(self.list_obstacles)
+            if collision:
+                continue
+            else:
+                self.list_nodes.append(new_node)
+            
             #######
 
             if show_anim and it % 5 == 0:
@@ -72,6 +148,43 @@ class RRT_planner:
 
         return None  # cannot find path
 
+    def extend_towards(self, or_node: Node, dest_node: Node) -> Node:
+        """Given an origin node and a destination node, this function adds a node in the
+        direction of dest_node from origin_node, at most self.path_res away.
+        If the distance between the two nodes is less than
+        `self.max_branch_length`, joins the two nodes, and returns the dest_node.
+        
+        Arguments:
+            or_node {Node} -- Origin Node
+            dest_node {Node} -- Destination node
+            step_length {float} -- the maximum length of each step along the path.
+        
+        Returns:
+            Node -- Returns this node in the middle, or dest_node if the
+            dest_node can be reached in one step.
+        """
+        dist, angle = or_node.to(dest_node)
+        if dist <= self.max_branch_length:
+            # the dest_node can be reached, therefore we will simply join the
+            # two nodes, update the path of the dest_node, and return the
+            # destination node.
+            new_node = self.Node(
+                x = dest_node.x,
+                y = dest_node.y,
+            )
+        else:
+            # we can't reach the dist_node, so we make a new node in the middle, as close as possible to dest_node.
+            new_node = self.Node(
+                x = or_node.x + np.cos(angle) * self.max_branch_length,
+                y = or_node.y + np.sin(angle) * self.max_branch_length,
+            )
+
+        path_x, path_y = or_node.straight_path_to(new_node, self.path_res)
+        new_node.path_x = path_x
+        new_node.path_y = path_y
+        new_node.parent = or_node
+        return new_node
+    
     def extend(self, or_node, dest_node):
         """
         Returns a new node going from or_node in the direction of dest_node with maximal distance of max_branch_length. New node path goes from parent to new node with steps of path_res.
@@ -79,7 +192,6 @@ class RRT_planner:
         new_node = self.Node(or_node.x, or_node.y)
         dist, angle = self.compute_dist_ang(new_node, dest_node)
         dist_extension = self.max_branch_length
-
         new_node.path_x = [new_node.x]
         new_node.path_y = [new_node.y]
 
@@ -182,7 +294,13 @@ class RRT_planner:
 
         return min_id
     
-    
+    def get_node_closest_to(self, target: Node) -> Node:
+        # Returns index of node in list_nodes that is the closest to random_node
+        distances = {
+            node: ((node.x - target.x) ** 2 + (node.y - target.y) ** 2)
+            for node in self.list_nodes
+        }
+        return min(distances, key=distances.get)    
     
 class RTT_Path_Follower:
     """
