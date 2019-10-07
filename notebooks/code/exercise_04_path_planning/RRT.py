@@ -1,4 +1,3 @@
-from __future__ import annotations
 import random
 import math
 import matplotlib.pyplot as plt
@@ -22,7 +21,7 @@ class RRT_planner:
             self.path_x = []
             self.path_y = []
 
-        def to(self, other: Node) -> Tuple[float, float]:
+        def to(self, other: "Node") -> Tuple[float, float]:
             """Returns the distance and angle between this node and `other`.
             
             Arguments:
@@ -37,7 +36,7 @@ class RRT_planner:
             angle = math.atan2(dy, dx)
             return d, angle
 
-        def straight_path_to(self: Node, end_node: Node, step_size: float) -> Tuple[List[float], List[float]]:
+        def straight_path_to(self: "Node", end_node: "Node", step_size: float) -> Tuple[List[float], List[float]]:
             """Returns the coordinates of the straight line path between `self` and `end_node`.
             
             Arguments:
@@ -127,7 +126,10 @@ class RRT_planner:
             # YOUR CODE HERE
             random_node = self.get_random_node()
             closest_node = self.get_node_closest_to(random_node)
-            new_node = self.extend_towards(closest_node, random_node)
+            
+            # new_node = self.extend_towards(closest_node, random_node)
+            new_node = self.extend(closest_node, random_node)
+
             collision = new_node.collides_with(self.list_obstacles)
             if collision:
                 continue
@@ -301,7 +303,8 @@ class RRT_planner:
             for node in self.list_nodes
         }
         return min(distances, key=distances.get)    
-    
+
+
 class RTT_Path_Follower:
     """
     Follows a path given by RRT_Planner
@@ -309,7 +312,35 @@ class RTT_Path_Follower:
     def __init__(self, path, local_env):
         self.path = path
         self.env = local_env
-    
+        print("INIT WAS CALLED 1")
+
+    def closest_curve_point(self, pos, angle):
+        """Gives the curve point closest to the agent, and the tangent at that point
+        Arguments:
+            self {[type]} -- [description]
+            angle {[type]} -- [description]
+        """
+        closest_node = None
+        closest_node_index = None
+        min_distance = None 
+
+        pos = np.asarray([pos[0], pos[2]])
+
+        for i, path_node in enumerate(self.path):
+            print(path_node)
+            delta = path_node - pos
+            dist = delta.dot(delta)
+            if min_distance is None or dist < min_distance:
+                min_distance = dist
+                closest_node = path_node
+                closest_node_index = i
+
+        tangent = self.path[closest_node_index+1] - closest_node
+        tangent /= np.linalg.norm(tangent)
+
+        return closest_curve_point, tangent
+
+
     def next_action(self):
         # Current position and angle
         cur_pos_x = self.env.cur_pos[0]
@@ -324,6 +355,105 @@ class RTT_Path_Follower:
         # YOUR CODE HERE: change v and omega so that the Duckiebot keeps on following the path
         #
         #######
+        print("PATH", self.path)  
         
+        v, omega = self.pure_pursuit(
+            self.env,
+            self.env.cur_pos,
+            self.env.cur_angle,
+            follow_dist=0.25,
+        )      
+        return v, omega
+    
+    def pure_pursuit(self, env, pos, angle, follow_dist=0.25):
+        # Return the angular velocity in order to control the Duckiebot using a pure pursuit algorithm.
+        # Parameters:
+        #     env: Duckietown simulator
+        #     pos: global position of the Duckiebot
+        #     angle: global angle of the Duckiebot
+        # Outputs:
+        #     v: linear veloicy in m/s.
+        #     omega: angular velocity, in rad/sec. Right is negative, left is positive.
+        
+        # Find the curve point closest to the agent, and the tangent at that point
+        closest_point, closest_tangent = self.closest_curve_point(pos, angle)
+    
+        def find_curve_point_better(follow_dist, step_size=0.05) -> float:
+            """
+            We take baby steps along the curve, and we return the first point along
+            that curve that is at least L distance away from the robot.
+            """
+            def distance_mag(a, b):
+                diff = a-b
+                return (diff).dot(diff)
+            
+            # Start off from closest_point
+            curve_point, tangent = closest_point, closest_tangent
+            distance_from_robot_mag = distance_mag(pos, curve_point)
+            follow_dist_mag = follow_dist**2
+
+            max_iterations = 10
+            iterations = 0
+            while distance_from_robot_mag < follow_dist_mag and iterations < max_iterations:
+                # take a small step forward from the current curve_point
+                forward_projection = curve_point + tangent * step_size
+
+                # Find the curve point closest to the forward projection, and the tangent at that point
+                next_curve_point, next_tangent = self.closest_curve_point(forward_projection, angle)
+                if curve_point is None:
+                    break
+                curve_point, tangent = next_curve_point, next_tangent
+                # recalculate the distance
+                distance_from_robot_mag = distance_mag(curve_point, pos)
+
+                iterations += 1
+
+            return curve_point
+
+        # curve_point = find_curve_point_old()
+        curve_point = find_curve_point_better(follow_dist=self.lookup_distance, step_size=0.05)
+
+        robot_to_curve_point = curve_point - pos
+        robot_to_curve_point_angle = np.arctan2(-robot_to_curve_point[2], robot_to_curve_point[0])
+        alpha = robot_to_curve_point_angle - angle
+        alpha = wrap(alpha)
+        sin_alpha = np.sin(alpha)
+        
+        # need to tune this.
+        self.k_l = 0.25
+        self.k_v = 0.25
+        
+
+        v = self.k_v / abs(alpha)
+        
+        # clamp the commanded speed
+        max_speed = 2.0
+        v = min(v, max_speed)
+        
+        lookup_distance = self.k_l * v
+        p = 0.8
+        
+        # # without smoothing.
+        # self.lookup_distance = lookup_distance
+        
+        # With smoothing (prevents jerky motion)
+        self.lookup_distance = p * self.lookup_distance + (1-p) * lookup_distance
+        self.points["lookup_distance"].append(self.lookup_distance)
+
+        omega = sin_alpha / self.lookup_distance
+        # cross-track error
+        cross_track_error = sin_alpha * np.linalg.norm(robot_to_curve_point)
+        self.points["cross_track_error"].append(cross_track_error)
+        # angle error,
+        angle_of_tangent = np.arctan2(-closest_tangent[2], closest_tangent[0])
+        angle_error = angle_of_tangent - angle
+        angle_error = wrap(angle_error)
+        self.points["angle_error"].append(angle_error)
+        # commanded linear velocity
+        self.points["commanded_linear_velocity"].append(v)
+        # commanded angular velocity 
+        self.points["commanded_angular_velocity"].append(omega)
+
+
         return v, omega
     
