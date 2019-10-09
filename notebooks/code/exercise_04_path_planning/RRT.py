@@ -4,6 +4,28 @@ import matplotlib.pyplot as plt
 import numpy as np
 from typing import *
 
+def wrap(angle: float) -> float:
+    """Takes in any angle (in radians), and expresses it inside the [-np.pi, np.pi] range.
+    
+    Arguments:
+        angle {float} -- An angle in radians
+    
+    Returns:
+        float -- The angle projected within the range (-np.pi, np.pi]
+    """
+    two_pi = 2 * np.pi
+    angle %= two_pi
+    if angle < 0:
+        angle += two_pi
+    # angle is now inside [0, 2pi]
+    if angle > np.pi:
+        angle -= two_pi
+    assert (- np.pi) < angle <= np.pi
+    return angle
+
+def to_3d(point_2d):
+    return np.asarray([point_2d[0], 0, point_2d[1]])
+
 class RRT_planner:
     """
     Rapid Random Tree (RRT) planner
@@ -311,35 +333,18 @@ class RTT_Path_Follower:
     """
     def __init__(self, path, local_env):
         self.path = path
+        self.path_3d = [to_3d(p) for p in self.path]
+        self.forward_path = list(reversed(self.path_3d))
         self.env = local_env
-        print("INIT WAS CALLED 1")
+        self.lookup_distance = 0.5
+        self.max_v = 0.5
+        import collections
+        self.points = collections.defaultdict(list)
+        print("INIT WAS CALLED")
+        self.omega = None
 
-    def closest_curve_point(self, pos, angle):
-        """Gives the curve point closest to the agent, and the tangent at that point
-        Arguments:
-            self {[type]} -- [description]
-            angle {[type]} -- [description]
-        """
-        closest_node = None
-        closest_node_index = None
-        min_distance = None 
-
-        pos = np.asarray([pos[0], pos[2]])
-
-        for i, path_node in enumerate(self.path):
-            print(path_node)
-            delta = path_node - pos
-            dist = delta.dot(delta)
-            if min_distance is None or dist < min_distance:
-                min_distance = dist
-                closest_node = path_node
-                closest_node_index = i
-
-        tangent = self.path[closest_node_index+1] - closest_node
-        tangent /= np.linalg.norm(tangent)
-
-        return closest_curve_point, tangent
-
+        self.target_index = 1
+        self.state = "TURNING"
 
     def next_action(self):
         # Current position and angle
@@ -355,16 +360,106 @@ class RTT_Path_Follower:
         # YOUR CODE HERE: change v and omega so that the Duckiebot keeps on following the path
         #
         #######
-        print("PATH", self.path)  
+        def c(angle):
+            """
+            Taken from https://piazza.com/class/k06skksxrwp18e?cid=90, 
+            """
+            return np.asarray([
+                [np.cos(angle), 0, -np.sin(angle)],
+                [0, -1, 0],
+                [-np.sin(angle), 0, -np.cos(angle)],    
+            ])
         
+        target_pos = self.forward_path[self.target_index]
+
+        to_target = target_pos - self.env.cur_pos
+        # print("to_target", to_target)
+        to_target_relative = c(self.env.cur_angle) @ to_target
+        # print("to_target_relative", to_target_relative)
+        
+        mag = to_target_relative.dot(to_target_relative)
+        if mag < 0.05:
+            self.target_index += 1
+            print("Heading to next point on the path: ", self.forward_path[self.target_index])
+            if self.target_index == len(self.forward_path):
+                print("REACHED THE GOAL!")
+                return 0, 0
+
+        alpha = np.arctan2(to_target_relative[2], to_target_relative[0])
+        alpha = wrap(alpha)
+        # print("ALPHA:", alpha)
+        omega, v = 0, 0
+        if abs(alpha) > 0.01:
+            if self.state != "TURNING":
+                # print("TURNING")
+                self.state = "TURNING"
+            omega = 1 * alpha
+            v = 0
+        else:
+            if self.state != "STRAIGHT":
+                # print("STRAIGHT")
+                self.state = "STRAIGHT"
+            omega = 0
+            v = 0.5 * mag
+            v = min(v, 0.05)
+            v = max(v, 2.0)
+        
+        ## useful for debugging
+        self.points["mag"].append(mag)
+        self.points["alpha"].append(alpha)
+        self.points["omega"].append(omega)
+        self.points["v"].append(v)
+
+        return v, omega
+
+
+
+        mag = to_target.dot(to_target)
+        print("current pos:", self.env.cur_pos)
+        print("Current angle (calculated):", wrap(np.arctan2(self.env.cur_pos[2], self.env.cur_pos[0])))
+        print("Current angle (actual):", wrap(self.env.cur_angle))
+
+        to_target_angle = np.arctan2(to_target[2], to_target[0])
+        
+
+
         v, omega = self.pure_pursuit(
             self.env,
             self.env.cur_pos,
             self.env.cur_angle,
-            follow_dist=0.25,
-        )      
+            follow_dist=0.50,
+        )
         return v, omega
     
+    def closest_curve_point(self, pos, angle):
+        """Gives the curve point closest to the agent, and the tangent at that point
+        Arguments:
+            self {[type]} -- [description]
+            angle {[type]} -- [description]
+        """
+        closest_node = None
+        closest_node_index = None
+        min_distance = None
+
+        pos = np.asarray(pos)
+
+        for i, path_node in enumerate(self.path_3d):
+            delta = path_node - pos
+            dist = delta.dot(delta)
+            if min_distance is None or dist < min_distance:
+                min_distance = dist
+                closest_node = path_node
+                closest_node_index = i
+        
+        if closest_node_index == 0:
+            tangent = np.asarray(closest_node) - np.asarray(self.path_3d[1])
+        else:
+            tangent = np.asarray(self.path_3d[closest_node_index-1]) - np.asarray(self.path_3d[closest_node_index])
+        tangent /= np.linalg.norm(tangent)
+
+        return closest_node, tangent
+
+
     def pure_pursuit(self, env, pos, angle, follow_dist=0.25):
         # Return the angular velocity in order to control the Duckiebot using a pure pursuit algorithm.
         # Parameters:
@@ -423,14 +518,12 @@ class RTT_Path_Follower:
         self.k_l = 0.25
         self.k_v = 0.25
         
-
-        v = self.k_v / abs(alpha)
+        v = self.max_v
+        # v = self.k_v / abs(alpha)
+        # v = min(v, self.max_v)
         
-        # clamp the commanded speed
-        max_speed = 2.0
-        v = min(v, max_speed)
-        
-        lookup_distance = self.k_l * v
+        lookup_distance = self.lookup_distance
+        # lookup_distance = self.k_l * v
         p = 0.8
         
         # # without smoothing.
@@ -441,6 +534,7 @@ class RTT_Path_Follower:
         self.points["lookup_distance"].append(self.lookup_distance)
 
         omega = sin_alpha / self.lookup_distance
+
         # cross-track error
         cross_track_error = sin_alpha * np.linalg.norm(robot_to_curve_point)
         self.points["cross_track_error"].append(cross_track_error)
@@ -456,4 +550,19 @@ class RTT_Path_Follower:
 
 
         return v, omega
+
+    
+    def plot(self):
+        import matplotlib.pyplot as plt
+        import math
+        num_plots = len(self.points.keys())
+        
+        fig = plt.figure(figsize=(15, 12))
+        for i, (title, list_of_points) in enumerate(self.points.items()):
+            plt.subplot(2, math.ceil(num_plots / 2), i+1)
+            data_np = np.asarray(list_of_points)
+            plt.plot(data_np)
+            plt.title(title)
+        # plt.legend(self.points.keys(), loc="upper right")
+        plt.suptitle("Fabrice Normandin")
     
