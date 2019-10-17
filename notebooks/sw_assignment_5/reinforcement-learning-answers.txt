@@ -48,3 +48,42 @@ Question 0:
             c2 = -25
             c3 = -50
             This set of parameters places a relatively equal importance to driving fast and in the center of the lane, all the while trying very hard to avoid obstacles.
+
+1. There are subtle, but important, bugs that have been introduced into the code above.
+    Your job is to find them, and explain them in your reinforcement-learning-answers.txt.
+    You'll want to reread the original DQN and DDPG papers in order to better understand the issue,
+    but by answering the following subquestions (please put the answers to these in the submission for full credit),
+    you'll be on the right track:
+
+    a) Read some literature on actor-critic methods, including the original actor-critic paper.
+        - What is an issue that you see related to non-stationarity?
+            The environment we obtain observations from changes over time, and the observations we obtain can exhibit a 'trend' due to this change in the environment.
+
+        - Define what non-stationarity means in the context of machine learning and how it relates to actor-critic methods.
+            (from wikipedia: https://en.wikipedia.org/wiki/Stationary_process)
+            A stationary process is a process that generates data whose distribution does not depend on time, and thus the mean, variance and covariance of the data don't change when shifted in time.
+            From this definition of a stationary process, I am assuming that Stationarity in the context of machine learning would relate to the idea that  
+            
+
+        - In addition, give some hypotheses on why reinforcement learning is much more difficult (from an optimization perspective)
+        than supervised learning, and how the answer to the previous question and this one are related.
+
+    b) What role does the replay buffer play in off-policy reinforcement learning?
+    
+        - It's most important parameter is max_size - how does changing this value (answer for both increasing and decreasing trends) qualitatively affect the training of the algorithm?
+
+    c) Challenge Question:
+        - Briefly, explain how automatic differentiation works.
+            By keeping track of the tensor operations performed during the forward pass, ML frameworks like pytorch and Tensorflow are able to deduce the backward pass, because the backward pass for each operator is known.
+            When calling `loss.backward()`, pytorch travels backward through the computation graph (since each tensor operator keeps track of its dependants) and recursively executes on all the graph nodes "attached" to the first node which require a gradient.
+  
+        - In addition, expand on the difference between a single-element tensor (that requires_grad) and a scalar value as it relates to automatic differentiation;
+        when do we want to backpropogate through a single-element tensor, and when do we not?
+            A single-element tensor that requires_grad can be considered a node within a computational graph.
+            If it is used within another tensor operation, the symbolic link between these 'nodes' can be used to recreate the backward pass (the partial derivative of the resulting variable with respect to the first one.)
+
+        
+        - Take a close look at the code and how losses are being backpropogated.
+            On paper or your favorite drawing software, draw out the actor-critic architecture as described in the code, and label how the actor and critic losses are backpropogated.
+            On your diagram, highlight the particular loss that will cause issues with the above code, and fix it.
+
