@@ -1,0 +1,50 @@
+Question 0:
+    After understanding the above computed reward, experiment with the constants for each component.
+    # default values:
+    c1, c2, c3 = 1.0, -10.0, -40.0
+    reward = (
+        c1 * speed * lp.dot_dir +
+        c2 * np.abs(lp.dist) +
+        c3 * col_penalty
+    )
+    
+    
+    - What type of behavior does the above reward function penalize?
+        This reward penalises getting in close proximity to obstacles (via col_penalty), and being far from the center of the lane (via lp.dist).
+        It encourages the robot to have a great speed in the direction parallel to the lane.
+
+    - Is this good or bad in context of autonomous driving?
+        This seems good, but having a collision should be avoided at all costs.
+
+    - Name some other issues that can arise with single-objective optimization.
+        One issue with single-objective optimization is that it is not context-aware.
+        For example, in an emergency, an autonomous car might need to be able to reorder or change its priorities, and 
+        having a fixed, single-objective would perhaps not be well adapted to this particular situation. 
+        The weight of each component of the objective should be allowed to change depending on the context, or another objective could be used altogether.
+        
+    - In addition, give three sets of constants and explain qualitatively what types of behavior each penalizes or rewards.
+        (note, you may want to use a different action policy than random). Place the answers to the above in reinforcement-learning-answers.txt
+
+        It is unclear to me what mechanism I should implement instead of the current random action. Hence I will leave it as it is.
+        Here are three potential sets of constants:
+
+        For sake of simplicity, let us consider a total of 100 'points' we can attribute to each of the loss components.
+        This keeps the total 'loss magnitude' the same for each set of parameters, for fair comparision.
+        1- Reckless driver:
+            c1 = 50.0
+            c2 = -10.0
+            c3 = -40.0
+            This set of parameters rewards going fast in the right direction more than anything else. It still tries to avoid obstacles, but 
+            doesn't really mind being far from the center of the lane.
+        
+        2- Grandma Driver:
+            c1 = 5.0
+            c2 = -40.0
+            c3 = -55.0
+            This set of parameters would value being safe and in the middle of the lane, at the expense of driving fast.
+        
+        3- Taxi Driver:
+            C1 = 25
+            c2 = -25
+            c3 = -50
+            This set of parameters places a relatively equal importance to driving fast and in the center of the lane, all the while trying very hard to avoid obstacles.
