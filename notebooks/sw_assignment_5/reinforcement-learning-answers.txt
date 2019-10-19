@@ -1,22 +1,24 @@
 Question 0:
     After understanding the above computed reward, experiment with the constants for each component.
-    # default values:
-    c1, c2, c3 = 1.0, -10.0, -40.0
-    reward = (
-        c1 * speed * lp.dot_dir +
-        c2 * np.abs(lp.dist) +
-        c3 * col_penalty
-    )
-    
+        # default values:
+        c1, c2, c3 = 1.0, -10.0, -40.0
+        reward = (
+            c1 * speed * lp.dot_dir +
+            c2 * np.abs(lp.dist) +
+            c3 * np.abs(col_penalty) # note that I added the abs, for simplicy.
+        )    
     
     - What type of behavior does the above reward function penalize?
+        
         This reward penalises getting in close proximity to obstacles (via col_penalty), and being far from the center of the lane (via lp.dist).
         It encourages the robot to have a great speed in the direction parallel to the lane.
 
     - Is this good or bad in context of autonomous driving?
-        This seems good, but having a collision should be avoided at all costs.
+
+        This seems good, but having a collision should be avoided at all costs. Furthermore, it doesn't take into consideration collisions with other vehicles.
 
     - Name some other issues that can arise with single-objective optimization.
+
         One issue with single-objective optimization is that it is not context-aware.
         For example, in an emergency, an autonomous car might need to be able to reorder or change its priorities, and 
         having a fixed, single-objective would perhaps not be well adapted to this particular situation. 
@@ -55,35 +57,138 @@ Question 0:
     but by answering the following subquestions (please put the answers to these in the submission for full credit),
     you'll be on the right track:
 
+    Bugs / modifications:
+        - Simple bugs to get the code to run:
+            - self.flat_size = 31968
+            - self.lr --> self.relu
+            - CriticCNN --> Critic
+            - args.save_models --> save_models
+            - env_timesteps = 1000 (or some other value)
+        - the start_timesteps should be lower than max_timesteps, and the env_timesteps should be some value between start_timesteps and max_timesteps.  
+        - The critic's output should be a scalar value for each (observation, action) pair, rather than an [action-size] vector of values in the [-1, 1] range.
+        - There is no target network for the Actor or for the critic. (this might be a design decision, rather than a bug?)
+        - target_Q should be detached
+
     a) Read some literature on actor-critic methods, including the original actor-critic paper.
         - What is an issue that you see related to non-stationarity?
+
             The environment we obtain observations from changes over time, and the observations we obtain can exhibit a 'trend' due to this change in the environment.
+            Successive samples are highly correlated, and thus the distribution of these samples changes over time.
 
         - Define what non-stationarity means in the context of machine learning and how it relates to actor-critic methods.
+
             (from wikipedia: https://en.wikipedia.org/wiki/Stationary_process)
             A stationary process is a process that generates data whose distribution does not depend on time, and thus the mean, variance and covariance of the data don't change when shifted in time.
-            From this definition of a stationary process, I am assuming that Stationarity in the context of machine learning would relate to the idea that  
             
 
         - In addition, give some hypotheses on why reinforcement learning is much more difficult (from an optimization perspective)
         than supervised learning, and how the answer to the previous question and this one are related.
 
-    b) What role does the replay buffer play in off-policy reinforcement learning?
-    
+            Citing the DQN paper:
+                "RL algorithms [...] must be able to learn from a scalar reward signal that is frequently sparse, noisy and delayed.
+                The delay between actions and resulting rewards, which can be thousands of timesteps long, 
+                seems particularly daunting when compared to the direct association between inputs and dargets found in supervised learning."
+            Also, in the following lines, the issue of non-stationarity is mentioned:
+                "Another issue is that most deep learning algorithms assume the data samples to be independent,
+                while in reinforcement learning one typically encounters sequences of highly correlated states.
+                Furthermore, in RL the data distribution changes as the algorithm leans new behaviours, which
+                can be problematic for deep learning methods that assume a fixed underlying distribution."
+            This non-stationarity contributes to RL being more difficult than supervised learning from an optimization perspective. 
+
+    b) Replay Buffer:
+        - What role does the replay buffer play in off-policy reinforcement learning?
+
+            The replay buffer is used to reduce the variance in the policy updates, "smooth[ing out] the training distribution over many past behaviours".[DQN] 
+            It reduces the correlation between consecutive update steps, and avoids oscillations or divergence in the parameters.[DQN]
+
         - It's most important parameter is max_size - how does changing this value (answer for both increasing and decreasing trends) qualitatively affect the training of the algorithm?
+
+            Increasing:
+                By increasing the replay buffer size, the training is smoothed out, as older transitions can sampled as part of an update step.
+                However, using too large a value for this max_size, in relation to the total number of steps (max_steps) can cause problems,
+                as very old transitions could be used throughout a large portion of training, making it difficult for the model to converge appropriately. 
+
+            Decreasing:
+                By decreasing the buffer size, we increase the correlation between the update steps.
+                When using too low a value, this can lead to overfitting, and the model might "break". (https://spinningup.openai.com/en/latest/algorithms/ddpg.html)
+
 
     c) Challenge Question:
         - Briefly, explain how automatic differentiation works.
-            By keeping track of the tensor operations performed during the forward pass, ML frameworks like pytorch and Tensorflow are able to deduce the backward pass, because the backward pass for each operator is known.
-            When calling `loss.backward()`, pytorch travels backward through the computation graph (since each tensor operator keeps track of its dependants) and recursively executes on all the graph nodes "attached" to the first node which require a gradient.
+            
+            By keeping track of operations performed on tensors during the forward pass,
+            ML frameworks like pytorch and Tensorflow are able to deduce the backward pass,
+            since the gradient function of each operation is known, as well as the fact that tensors
+            keep track of their parents (the tensors and operations that created them).
+            
+            When calling `loss.backward()`, pytorch travels backward through the graph by recursively
+            calculating the partial derivatives of each tensor and moving on to the tensor's parents
+            until a 'leaf' node is reached and it has a `requires_grad` attribute equal to `True`,
+            at which point its `grad` attribute is set to the value of the accumulated partial derivatives.
+            This `grad` attribute stores the gradients of the given parameter with respect to the original 'loss'
+            tensor on which the first `backward()` operation was called.
   
-        - In addition, expand on the difference between a single-element tensor (that requires_grad) and a scalar value as it relates to automatic differentiation;
-        when do we want to backpropogate through a single-element tensor, and when do we not?
-            A single-element tensor that requires_grad can be considered a node within a computational graph.
-            If it is used within another tensor operation, the symbolic link between these 'nodes' can be used to recreate the backward pass (the partial derivative of the resulting variable with respect to the first one.)
+            An optimizer can be created and passed a set of variables to watch (leaf nodes in the backward graph).
+            Whenever the `optimizer.zero_grad()` function is called, the `grad` attribute of each variable to set to 0.
+            When calling the `optimizer.step()` function, the optimization algorithm (for example SGD, ADAM, etc) uses
+            the learning_rate and the value of the `grad` attribute to update the parameter's values.
 
+        - In addition, expand on the difference between a single-element tensor (that requires_grad) and a scalar value as it relates to automatic differentiation;
+        - when do we want to backpropogate through a single-element tensor, and when do we not?
+            
+            As described in the previous question, a single-element tensor that requires_grad can be considered a node within a computational graph.
+            When we backpropagate through it with the 'backward()' function, all the parent tensors in the graph that were responsible for creating
+            it will receive a `grad` attribute and be updated when an optimizer step is performed.    
+            However, it is sometimes the case, that a tensor that we created using a network should be considered a 'constant',
+            in which case we do not wish to backpropagate the partial derivatives of the network's parameters with respect to this value. 
+            
+            For example when we are trying to update the network to make `current_Q` closer to `target_Q`, we should detach the `target_Q` tensor,
+            such that we don't accidentally move these two quantities closer to each other, but rather only move `current_Q` closer to `target_Q`. 
+            
         
         - Take a close look at the code and how losses are being backpropogated.
             On paper or your favorite drawing software, draw out the actor-critic architecture as described in the code, and label how the actor and critic losses are backpropogated.
             On your diagram, highlight the particular loss that will cause issues with the above code, and fix it.
 
+
+2. We discussed a case study of DQN in class. The original authors used quite a few tricks to get this to work.
+    Detail some of the following, and explain what problem they solve in training the DQN:
+    a) Target Networks
+
+        The target networks are networks whose weights are an exponential-moving-average of the Actor and Critic networks' weights.
+        They are used to stabilize, or "smooth-out" the training by reducing the change in the parameters,
+        and to simulate a sort of "memory" in the network as the "knowledge" obtained through past updates
+        doesn't get overwritten by current updates as much.
+        Therefore, the target networks can be thought of as solutions to the problem of catastrophic forgetting,
+        whereby the network forgets how to deal with a previous problem when learning on a new one.
+
+    b) Annealed Learning Rates
+
+        There is no mention of annealed learning rate in the DQN paper. The value of epsilon, used to sample the action to take at each timestep,
+        is annealed from 1.0 (totally random) to 0.1 over the course of the first 1 million training steps. 
+
+    c) Replay Buffer
+
+        The replay buffer, as previously mentioned, is used to reduce the variance in the policy updates, "smooth[ing out] the training distribution over many past behaviours".[DQN] 
+        It reduces the correlation between consecutive update steps, and avoids oscillations or divergence in the parameters.[DQN]
+        In doing so, it helps address the problem of non-stationarity in reinforcement learning by making the distribution more stable.
+
+    d) Random Exploration Period
+
+        Strictly speaking, there is no "random exploration period" in the DQN paper, at least not as it was implemented in the given code.
+        Rather, the epsilon of the epsilon-greedy sampling is annealed from 1.0 to 0.1 over the first 1 million steps, making the first sampled actions almost entirely random.
+        After the first 1 million frames, this epsilon was kept at 0.1, making 10% of the sampled actions random.
+        Also, from the DQN paper:
+            "Note that when learning by experience replay, it is necessary to learn off-policy (because our current parameters are different to those used to generate the sample).
+
+    e) Preprocessing the Image
+
+        The frames are cropped to a square and transformed to grayscale. Then, four such frames are stacked,
+        and this is used as the input to the Critic. Therefore, the Critic receives a condensed, fixed-length history.
+        This enables learning some relatively long-term relationship between actions  
+
+
+    3. Read about either TD3 or Soft Actor Critic;
+        for your choice, summarize what problems they are addressing with the standard actor-critic formulation, and how they solve them.
+
+        
