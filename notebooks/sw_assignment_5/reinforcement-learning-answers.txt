@@ -1,7 +1,11 @@
 
 ## FABRICE NORMANDIN
 
-## by the way, if you are viewing this in VSCODE, I'd suggest using "view" --> "toggle word wrap", (Alt + Z) by default.
+## NOTE: if you are viewing this in VSCODE, I'd suggest using "view" --> "toggle word wrap", (Alt + Z) by default.
+
+
+## Acknowledgements:
+I did work on this assignment in close collaboration with Rey, Mostafa, and Niki.
 
 
 Question 0:
@@ -146,8 +150,56 @@ Question 0:
 
     e) Preprocessing the Image
 
-        The frames are cropped to a square and transformed to grayscale. Then, four such frames are stacked, and this is used as the input to the Critic. Therefore, the Critic receives a condensed, fixed-length history. This enables learning some relatively long-term relationship between actions  
+        The frames are cropped to a square and transformed to grayscale. Then, four such frames are stacked, and this is used as the input to the Critic. Therefore, the Critic receives a condensed, fixed-length history. This enables learning some relatively long-term relationship between states, actions and rewards.
 
 
     3. Read about either TD3 or Soft Actor Critic; for your choice, summarize what problems they are addressing with the standard actor-critic formulation, and how they solve them.
+
+        I chose to read the TD3 paper. For sake of simplicity, I will mainly focus on comparing TD3 and DDPG, rather than the "standard actor-critic formulation". 
+
+        The main problem this paper addresses is the accumulation of error in Actor-Critic methods. This problem arises when the noisy signal from a function approximator gives too high a value to a bad state, which in turn causes this bad state to be used to update future states, and thus the error can accumulate over the course of training and "Cause arbitrarily bad states to be estimated as high value, resulting in suboptimal policy updates and divergent behaviour"[TD3]
+
+        They solve this in a few different ways:
+        1. They use a variation on Double Q-Learning, which had two actors (A1, A2) and two critics (C1, C2), with A1 is optimized with respect to C1 and A2 with respect to C2.
+            In their variant, however, they only used one actor, which reduces computational costs, and the Actor uses the minimum of the estimate values of each critic as its target. This is useful in that it "favors underestimations, which do not tend to be propagated during learning, as actions with low value estimates are avoided by the policy."[TD3]
+
+            In practice, the Critic model used for the regular critic and the target critic contain two identical networks, and produce two independant outputs for each (state, action) pair.
+
+            These lines, where the target_Q value is computed, are quite illustrative of that last point:
+            (https://github.com/sfujim/TD3/blob/master/TD3.py#L120)
+            ```python
+            # Compute the target Q value
+			target_Q1, target_Q2 = self.critic_target(next_state, next_action)
+			target_Q = torch.min(target_Q1, target_Q2)
+			target_Q = reward + not_done * self.discount * target_Q 
+            ```
+            
+            The critic loss is the sum of the MSE(current_Q1, target_Q) and MSE(Current_Q2, target_Q). This optimizes both critics to be closer to the target estimate.
+            
+        2. Noise is added to the output of the target_actor's output
+            - However, noise is clipped to a certain magnitude *before* being added to the action, and the resulting action is then clipped to fit the [-max_action, max_action] range. In their code, the default values have this noise clipped at [-0.5, 0.5] range.
+        
+        3. The policy (actor and actor_target) updates don't happen at every iteration like in DDPG. Instead, the actor is updated every `policy_freq` iterations (defaults to 2).
+            This has the effect of first minimizing the estimation error by the critics before introducing a policy update.
+            
+            (In a way, I metaphorically see this as giving the critics time to deliberate and come to a sort of agreement before updating the actor and target networks.
+            For example, let's suppose that the conceptual evaluations of both critics and of the target_critic with respect to a given action are:
+                Q1: "YAY, great move!" (very positive)
+                Q2: "no, this sucks, dont do that" (negative)
+                target_Q: "this is an OK move" (neutral)
+            
+            There is a high variance in these estimations, which is problematic, because the output of the critics is used in updating the policy, and that "having a noisy gradient for the policy update [...] is known to reduce learning speed as well as hurt performance in practice. [TD3, Sutton & Barto, 1998].
+
+            Now, an update of Gradient Descent is performed for both critics, but not the target_critic. (Note that in practice another action would be sampled, but I omit that here for sake of simplicity and illustration).
+            Now would now get something like:
+                Q1: "meh, looks pretty good" (positive)
+                Q2: "that's not great" (slightly negative)
+                target_Q (unchanged): "this is an OK move" (neutral)
+
+            As the two critic networks are updated to get closer to the target_Q value, their outputs become less polarised, the policy update will 
+            Therefore, the update performed on the actor, and on the target networks, 
+            
+            (Also worth noting: The actor's loss is determined by the negative mean of only the first of the two output of the Critic. This is useful as it preserves the independance between the two "critics", and helps reduce the bias in the model.)
+
+
 
