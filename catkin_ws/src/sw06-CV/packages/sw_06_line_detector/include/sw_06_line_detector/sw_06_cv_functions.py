@@ -32,21 +32,21 @@ def Canny(image, threshold1, threshold2, apertureSize=3):
 		apertureSize = 3
 	
 	num_channels = image.shape[-1] if len(image.shape) == 3 else 1
-	# print("num channels:", num_channels)
-	# print("HERE")
 	try:
 		outputs = []
 		edge_gradients 	= np.zeros_like(image)
 		dxs 			= np.zeros_like(image)
 		dys 			= np.zeros_like(image)
+
 		for channel in range(num_channels):
-			smoothed_image = gaussian_blurring(image[..., channel], std=1, kernel_size=5)
-			dx, dy = image_derivatives(smoothed_image)
+			smoothed_image_channel = gaussian_blurring(image[..., channel], std=1, kernel_size=5)
+			dx, dy = image_derivatives(smoothed_image_channel)
 			dxs[..., channel] = dx
 			dys[..., channel] = dy
 		
 		edge_gradients = np.sqrt(dxs ** 2 + dys ** 2)
 		
+		# TODO: we take the mean over the channels axis. :(
 		edge_gradients = np.mean(edge_gradients, axis=-1)
 		dx = np.mean(dxs, axis=-1)
 		dy = np.mean(dys, axis=-1)
@@ -56,26 +56,30 @@ def Canny(image, threshold1, threshold2, apertureSize=3):
 		# edge_gradients = edge_gradients[max_grad_indices]
 		# dx = dxs[max_grad_indices]
 		# dy = dys[max_grad_indices]
+
 		
 		gradient_directions = snap_angles(np.arctan2(dy, dx))
+		filtered_image = non_maximum_suppression(image, edge_gradients, gradient_directions)
+		result = hysteresis_thresholding(filtered_image, edge_gradients, threshold1, threshold2)
 
-		masked_image = non_maximum_suppression(edge_gradients, gradient_directions)
-		result = hysteresis_thresholding(masked_image, edge_gradients, threshold1, threshold2)
 		# expected = cv2.Canny(image, threshold1, threshold2, apertureSize=3)
 		# print(result.shape, expected.shape)
+		# print(np.mean(result), np.mean(expected))
+		# print(np.count_nonzero(result), np.count_nonzero(expected))
+		# print(np.median(result), np.median(expected))
+		# print(np.max(result), np.max(expected))
+		# return expected
 		return result
 	except Exception as e:
 		traceback.print_exc()
 
-	
-
 
 def hysteresis_thresholding(image, image_gradients, min_val, max_val):
-	out = np.copy(image)
 	
-	strong_indices  = np.where(image >= max_val)
-	off_indices 	= np.where(image < min_val)
-	weak_indices 	= np.where((min_val <= image) & (image < max_val))
+	
+	strong_indices  = np.where(image_gradients >= max_val)
+	off_indices 	= np.where(image_gradients < min_val)
+	weak_indices 	= np.where((min_val <= image_gradients) & (image_gradients < max_val))
 	
 	# the set of all 'strong' indices.
 	# strong_indices = np.dstack(strong_indices)
@@ -124,12 +128,12 @@ def hysteresis_thresholding(image, image_gradients, min_val, max_val):
 		np.array([x for (x, y) in strong_indices_set], dtype=int),
 		np.array([y for (x, y) in strong_indices_set], dtype=int)
 	)
+	out = np.copy(image)
 	mask[kept_indices] = True
-	# print("keep", kept)
 	out[~mask] = 0.
 	return out
 
-def non_maximum_suppression(image_gradients, gradient_directions):
+def non_maximum_suppression(image, image_gradients, gradient_directions):
 	"""Non-maximum suppression
 	
 	To be honest, I'm very proud of this piece of code. No for-loops were needed.
@@ -158,7 +162,7 @@ def non_maximum_suppression(image_gradients, gradient_directions):
 	higher_than_forward  = pixel_middle > pixel_forward
 	higher_than_backward = pixel_middle > pixel_backward
 	is_local_maximum = higher_than_backward & higher_than_forward
-	out = np.copy(image_gradients)
+	out = np.copy(image)
 	out[~is_local_maximum] = 0
 	return out
 			
