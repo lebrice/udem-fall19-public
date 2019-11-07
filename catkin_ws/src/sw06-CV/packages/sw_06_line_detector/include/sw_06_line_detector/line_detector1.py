@@ -5,7 +5,8 @@ import duckietown_utils as dtu
 import numpy as np
 import rospy
 from .line_detector_interface import Detections, LineDetectorInterface
-
+import time
+        
 
 class LineDetectorHSV(dtu.Configurable, LineDetectorInterface):
     """ LineDetectorHSV """
@@ -58,7 +59,10 @@ class LineDetectorHSV(dtu.Configurable, LineDetectorInterface):
         return bw, edge_color
 
     def _findEdge(self, gray):
+        start = time.time()
         edges = sw06.Canny(gray, self.canny_thresholds[0], self.canny_thresholds[1], apertureSize=3)
+        end = time.time()
+        print("CANNY TOOK {:.6f} seconds.".format(end - start)) 
         return edges
 
     def _HoughLine(self, edge):

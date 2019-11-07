@@ -25,39 +25,118 @@ def dilate(bitwise, kernel):
 
 ## CATEGORY 2
 def Canny(image, threshold1, threshold2, apertureSize=3):
+	if apertureSize != 3:
+		import warnings
+		warnings.warn(UserWarning("Using apertureSize of 3."))
+		apertureSize = 3
+
 	smoothed_image = gaussian_blurring(image, std=1, kernel_size=5)
 	dx, dy = image_derivatives(smoothed_image)
 	edge_gradients = np.sqrt(dx ** 2 + dy ** 2)
-	gradient_angles = snap_angles(np.arctan2(dy / dx))
+
+	gradient_directions = snap_angles(np.arctan2(dy, dx))
 	
-	mask = non_maximum_suppression(smoothed_image, edge_gradients, gradient_angles)
+	masked_image = non_maximum_suppression(smoothed_image, gradient_directions)
+	output = hysteresis_thresholding(masked_image, edge_gradients, threshold1, threshold2)
+	return output
+	# return cv2.Canny(image, threshold1, threshold2, apertureSize=3)
 
-	return cv2.Canny(image, threshold1, threshold2, apertureSize=3)
 
+def hysteresis_thresholding(image, image_gradients, min_val, max_val):
+	out = np.copy(image)
+	
+	strong_indices  = np.where(image >= max_val)
+	off_indices 	= np.where(image < min_val)
+	weak_indices 	= np.where((min_val <= image) & (image < max_val))
+	
+	# the set of all 'strong' indices.
+	# strong_indices = np.dstack(strong_indices)
+	image_h = image.shape[0]
+	image_w = image.shape[1]
+	
+	def neighbourhood(index):
+		i, j = index
+		# TODO: maybe use pure numpy if there is time left.
+		# row, col = np.indices([3,3]) - 1
+		# print(image[row, col])
+		min_x = max(i-1, 0)
+		max_x = min(i+1, image_w)
+		min_y = max(j-1, 0)
+		max_y = min(j+1, image_h)
+		indices = [
+			(x, y)
+			for x in range(min_x, max_x)
+			for y in range(min_y, max_y)
+		]
+		indices.remove((i, j))
+		return indices
+		# return np.array(indices)
+	
+	strong_indices_set = set(zip(*strong_indices))
+	weak_indices_set = set(zip(*weak_indices))
+	
+	unexplored = set(strong_indices_set)
+	while unexplored:
+		index = unexplored.pop()
+		# print(index)
+		neighbours = set(neighbourhood(index))
+		# print(neighbours)
+		# print("strong indices", strong_indices_set)
+		# print("weak indices", weak_indices_set)
+		weak_neighbours = neighbours & weak_indices_set
+		# print("weak neighbours:", weak_neighbours)
+		# explore the weak neighbours.
+		unexplored.update(weak_neighbours)
+		# store the (newly) strong neighbours.
+		strong_indices_set.update(weak_neighbours)
+		weak_indices_set.difference_update(weak_neighbours)
+	
+	mask = np.zeros_like(image, dtype=bool)
+	kept_indices = (
+		np.array([x for (x, y) in strong_indices_set]),
+		np.array([y for (x, y) in strong_indices_set])
+	)
+	mask[kept_indices] = True
+	# print("keep", kept)
+	out[~mask] = 0.
+	return out
 
-def non_maximum_suppression(image, edge_gradients, gradient_directions):
-	"""
+def non_maximum_suppression(image, gradient_directions, out=None):
+	"""Non-maximum suppression
+	
+	To be honest, I'm very proud of this piece of code. No for-loops were needed.
 
 	Arguments:
-		image {[type]} -- [description]
-		edge_gradients {[type]} -- [description]
-		gradient_directions {[type]} -- [description]
+		image {[type]} -- the image to preform non-maximum suppresion on.
+		gradient_directions {[type]} -- the gradient directions
 	"""
-	# 	After getting gradient magnitude and direction, a full scan of image is done to remove any unwanted pixels which may not constitute the edge. For this, at every pixel, pixel is checked if it is a local maximum in its neighborhood in the direction of gradient. Check the image below:
-
-	# Point A is on the edge ( in vertical direction). Gradient direction is normal to the edge. Point B and C are in gradient directions. So point A is checked with point B and C to see if it forms a local maximum. If so, it is considered for next stage, otherwise, it is suppressed ( put to zero).
-
-	# In short, the result you get is a binary image with “thin edges”.
+	if out is None:
+		out = np.copy(image)
 	
 	# Get where to check depending on the "direction"
-	direction_offset_x = np.cos(gradient_directions)
-	direction_offset_y = np.sin(gradient_directions)
-	print(direction_offset_x)
-	print(direction_offset_y)
+	direction_offset_x = np.round(np.cos(gradient_directions)).astype(int)
+	direction_offset_y = np.round(np.sin(gradient_directions)).astype(int)
+	direction_offset = np.dstack((direction_offset_x, direction_offset_y))
+		
+	# the (i, j) indices of all points in the image.
+	row, col = np.indices(image.shape)
+	# in order not to cause any indexing errors, we create a
+	# padded version of the image with the edge values duplicated.
+	# a pixel at (row, col) in the image is located at (row+1, col+1) in the padded image.
+	image_ = np.pad(image, 1, mode="edge")
+	row_, col_ = row + 1, col + 1
+	# get the image pixels before and after each pixel in the image. 
+	pixel_middle = image[row, col]
+	pixel_forward  = image_[row_ + direction_offset_x, col_ + direction_offset_y]
+	pixel_backward = image_[row_ - direction_offset_x, col_ - direction_offset_y]
+
+	higher_than_forward  = pixel_middle > pixel_forward
+	higher_than_backward = pixel_middle > pixel_backward
+	is_local_maximum = higher_than_backward & higher_than_forward
+	out[~is_local_maximum] = 0
+
+	return out
 			
-	for i, row in enumerate(image):
-		for j, pixel in enumerate(row):
-			pass
 
 def snap_angles(angles):
 	"""Snaps a given set of angles to one of the horizontal, vertical, or one of the two diagonal orientations.
@@ -192,12 +271,12 @@ def HoughLinesP(image, rho, theta, threshold, lines, minLineLength, maxLineGap):
 
 
 
-X = np.array([
-	[1, 1, 2, 4, 5],
-	[5, 6, 7, 8, 6],
-	[3, 2, 1, 0, 7],
-	[5, 1, 9, 3, 6],
-	[1, 2, 3, 4, 8],
-])
-bob = Canny(X, None, None)
-print(bob)
+# X = np.array([
+# 	[1, 1, 2, 4, 5],
+# 	[5, 6, 12, 8, 6],
+# 	[3, 2, 15, 123, 7],
+# 	[5, 1, 23, 3, 6],
+# 	[1, 2, 3, 4, 8],
+# ])
+# bob = Canny(X, 5, 25)
+# print(bob)
