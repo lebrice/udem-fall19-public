@@ -25,20 +25,26 @@ def dilate(bitwise, kernel):
 
 ## CATEGORY 2
 def Canny(image, threshold1, threshold2, apertureSize=3):
+	print("CANNYYYYY")
 	if apertureSize != 3:
 		import warnings
 		warnings.warn(UserWarning("Using apertureSize of 3."))
 		apertureSize = 3
+	num_channels = image.shape[-1] if len(image.shape) == 3 else 1
+	output = np.zeros_like(image)
+	# print("num channels:", num_channels)
+	# print("HERE")
+	outputs = []
+	for channel in range(num_channels):
+		smoothed_image = gaussian_blurring(image[..., channel], std=1, kernel_size=5)
+		dx, dy = image_derivatives(smoothed_image)
+		edge_gradients = np.sqrt(dx ** 2 + dy ** 2)
+		gradient_directions = snap_angles(np.arctan2(dy, dx))
+		masked_image = non_maximum_suppression(smoothed_image, gradient_directions)
+		output = hysteresis_thresholding(masked_image, edge_gradients, threshold1, threshold2)
+		outputs.append(output)
+	return np.stack(outputs, axis=-1)
 
-	smoothed_image = gaussian_blurring(image, std=1, kernel_size=5)
-	dx, dy = image_derivatives(smoothed_image)
-	edge_gradients = np.sqrt(dx ** 2 + dy ** 2)
-
-	gradient_directions = snap_angles(np.arctan2(dy, dx))
-	
-	masked_image = non_maximum_suppression(smoothed_image, gradient_directions)
-	output = hysteresis_thresholding(masked_image, edge_gradients, threshold1, threshold2)
-	return output
 	# return cv2.Canny(image, threshold1, threshold2, apertureSize=3)
 
 
@@ -93,8 +99,8 @@ def hysteresis_thresholding(image, image_gradients, min_val, max_val):
 	
 	mask = np.zeros_like(image, dtype=bool)
 	kept_indices = (
-		np.array([x for (x, y) in strong_indices_set]),
-		np.array([y for (x, y) in strong_indices_set])
+		np.array([x for (x, y) in strong_indices_set], dtype=int),
+		np.array([y for (x, y) in strong_indices_set], dtype=int)
 	)
 	mask[kept_indices] = True
 	# print("keep", kept)
@@ -264,13 +270,12 @@ def gaussian_derivative_1d(sigma, kernel_size):
 	return q * phi_x
 
 
-
 ## CATEGORY 3 (This is a bonus!)
 def HoughLinesP(image, rho, theta, threshold, lines, minLineLength, maxLineGap):
 	return cv2.HoughLinesP(image, rho, theta, threshold, lines, minLineLength, maxLineGap)
 
-
-
+X = np.random.rand(80, 160, 3)
+print(X.shape)
 # X = np.array([
 # 	[1, 1, 2, 4, 5],
 # 	[5, 6, 12, 8, 6],
@@ -278,5 +283,7 @@ def HoughLinesP(image, rho, theta, threshold, lines, minLineLength, maxLineGap):
 # 	[5, 1, 23, 3, 6],
 # 	[1, 2, 3, 4, 8],
 # ])
-# bob = Canny(X, 5, 25)
-# print(bob)
+
+# X = np.tile(X[..., np.newaxis], (1, 1, 3))
+bob = Canny(X, 0.1, 0.9)
+print(bob.shape)

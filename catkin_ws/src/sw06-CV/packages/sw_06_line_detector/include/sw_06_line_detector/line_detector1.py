@@ -62,7 +62,7 @@ class LineDetectorHSV(dtu.Configurable, LineDetectorInterface):
         start = time.time()
         edges = sw06.Canny(gray, self.canny_thresholds[0], self.canny_thresholds[1], apertureSize=3)
         end = time.time()
-        print("CANNY TOOK {:.6f} seconds.".format(end - start)) 
+        print("CANNY TOOK", end - start, "seconds.") 
         return edges
 
     def _HoughLine(self, edge):
