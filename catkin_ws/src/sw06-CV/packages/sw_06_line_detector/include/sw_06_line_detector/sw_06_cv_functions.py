@@ -47,10 +47,10 @@ def Canny(image, threshold1, threshold2, apertureSize=3):
 		# # print(np.count_nonzero(result), np.count_nonzero(expected))
 		# # print(np.median(result), np.median(expected))
 		# # print(np.max(result), np.max(expected))
-		return expected
+		# return expected
 		return result
 	except Exception as e:
-		traceback.# print_exc()
+		traceback.print_exc()
 
 def get_image_gradients(image):
 	num_channels = image.shape[-1] if len(image.shape) == 3 else 1
@@ -63,16 +63,16 @@ def get_image_gradients(image):
 	image = image.astype(float)
 
 	for channel in range(num_channels):
-		image[..., channel] = gaussian_blurring(image[..., channel], std=1, kernel_size=5)
+		# image[..., channel] = gaussian_blurring(image[..., channel], std=1, kernel_size=5)
 		dx, dy = image_derivatives(image[..., channel])
 		dxs[..., channel] = dx
 		dys[..., channel] = dy
 	
 	## TODO: comment this out, just testing to check if the sobel operation is the issue
-	# sobel_x = cv2.Sobel(image, cv2.CV_8U, 1, 0, scale=1, ksize=3)
-	# sobel_y = cv2.Sobel(image, cv2.CV_8U, 0, 1, scale=1, ksize=3)
+	# sobel_x = cv2.Sobel(image, cv2.CV_8U, 1, 0, ksize=3)
+	# sobel_y = cv2.Sobel(image, cv2.CV_8U, 0, 1, ksize=3)
 	# dxs, dys = sobel_x, sobel_y
-
+	
 	edge_gradients = np.sqrt(dxs ** 2 + dys ** 2)
 	
 	# We use the grad magnitude and dx and dy's from the channel with the highest gradient.
@@ -97,10 +97,10 @@ def hysteresis_thresholding(image, image_gradients, min_val, max_val):
 	largest_gradient_value = np.max(image_gradients)
 	while largest_gradient_value < max_val:
 		# print("Largest gradient value:", largest_gradient_value)
-		warnings.warn(UserWarning("Image has no edge gradients above upper threshold, increasing all gradients values!"))
-		# return np.zeros_like(image)
-		image_gradients *= 1.5
-		largest_gradient_value = np.max(image_gradients)
+		warnings.warn(UserWarning("Image has no edge gradients above upper threshold!"))
+		return np.zeros_like(image)
+		# image_gradients *= 1.5
+		# largest_gradient_value = np.max(image_gradients)
 	
 	# # print("Largest gradient value:", largest_gradient_value)
 	# the set of all 'strong' indices.
@@ -116,8 +116,6 @@ def hysteresis_thresholding(image, image_gradients, min_val, max_val):
 	to_explore = np.zeros_like(image_gradients, dtype=bool)
 	to_explore[index_with(strong_indices)] = True
 
-	explored = np.zeros_like(image_gradients, dtype=bool)
-
 	strong = np.zeros_like(image_gradients, dtype=bool)
 	strong[index_with(strong_indices)] = True
 	# # print("strong:", strong)
@@ -126,13 +124,12 @@ def hysteresis_thresholding(image, image_gradients, min_val, max_val):
 	weak[index_with(weak_indices)] = True
 
 	unexplored_indices = aggregate(np.nonzero(to_explore))
-	# # print("unexplored (initial):", [str(v) for v in unexplored])
-	# # print("weak indices (initial):", [str(v) for v in weak_indices])
-	# # print("off indices (initial):", [str(v) for v in off_indices])
+	print("strong indices (initial):", len(unexplored_indices))
+	print("weak indices (initial):", len(weak_indices))
+	print("off indices (initial):", len(off_indices))
 	already_explored = np.zeros_like(to_explore)
 
 	while len(unexplored_indices) > 0:
-		
 		# # print("exploring indices ", [str(v) for v in indices])
 		# # print(indices)
 
@@ -158,11 +155,11 @@ def hysteresis_thresholding(image, image_gradients, min_val, max_val):
 		
 		unexplored_indices = aggregate(np.nonzero(to_explore))
 	
-	out = np.zeros_like(image_gradients)
-	out[~strong] = 0
-	out[strong] = 255
+	
+	image_gradients[~strong] = 0
+	image_gradients[strong] = 255
 	# print("AFTER HYSTERISIS THRESHOLDING:", out)
-	return out
+	return image_gradients
 
 
 def aggregate(list_of_indices):
@@ -204,7 +201,7 @@ def neighbourhood(index, image_width, image_height):
 	greater_than_image_height = np.where(neighbours[..., 0] >= image_height)
 	mask[greater_than_image_height] = False
 	# or image_width in z
-	greater_than_image_width = np.where(neighbours[..., 1] >= image_height)
+	greater_than_image_width = np.where(neighbours[..., 1] >= image_width)
 	mask[greater_than_image_width] = False
 	# or that correspond to an index in 'index'
 	tiled = np.expand_dims(index, 1)
@@ -297,11 +294,10 @@ def non_maximum_suppression(image, image_gradients, gradient_directions):
 	higher_than_forward  = pixel_middle > pixel_forward
 	higher_than_backward = pixel_middle > pixel_backward
 	is_local_maximum = higher_than_backward & higher_than_forward
-	out = np.copy(image)
-	out[~is_local_maximum] = 0
+	
+	image[~is_local_maximum] = 0
 	# print("AFTER non-maximum suppression: ", out)
-
-	return out
+	return image
 			
 
 def snap_angles(angles):
@@ -472,6 +468,13 @@ def gaussian_derivative_1d(sigma, kernel_size):
 def HoughLinesP(image, rho, theta, threshold, lines, minLineLength, maxLineGap):
 	return cv2.HoughLinesP(image, rho, theta, threshold, lines, minLineLength, maxLineGap)
 
+# import matplotlib.pyplot as plt
+# bob = plt.imread("bob.jpg")
+# print(bob.shape)
+# result = Canny(bob, 75, 200)
+# print(result)
+# plt.imshow(result, cmap="gray")
+# plt.show()
 # # X = np.random.rand(80, 160, 3)
 # X = np.array([
 # 	[0, 0, 0, 0, 0],
