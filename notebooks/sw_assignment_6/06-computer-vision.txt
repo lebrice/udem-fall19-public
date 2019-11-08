@@ -1,0 +1,86 @@
+Fabrice Normandin
+Student ID #20142128
+
+TIP: if you're using Visual Studio Code to read this, enable word-wrap, using (Alt+Z) or in the "view" -> "toggle word wrap" option.
+
+Question 1: What is the role of this node? Describe shortly its input and its outputs. Write your answer in a 06-computer-vision.txt file.
+
+    The line detector node is responsible for extracting yellow, white and red lines from an image for other nodes to use in order to estimate the position of the robot in the lane.
+
+    Its main input is the compressed image, which is obtained by subscribing to the "corrected_image/compressed" topic. The "fsm_mode" topic is used to select which detector to use (as when navigating an intersection, a different detector is used than when following the lane), as well as a "switch" topic used to set the activity of the node on or off. 
+
+    Its outputs are the list of line segments found, which is published on the "segment_list" topic, as well as the image with the juxtaposed segment points, which can be useful for debugging. This image is published on the "image_with_lines" topic.
+
+
+
+Question 2: In the lane following pipeline, the ground projection node uses the outputs of the line detector. Write a short description of what the ground projection node does.
+
+    The ground projection node receives segments from the line_detector node, whose points are defined in terms of pixel locations in the image.
+    The ground projection node then computes the projected location of these points in robot space (on the ground plane), using its stored transformation matrix obtained through intrinsic camera calibration.
+
+
+Question 3: When an image is received by the subscriber, it goes through several transformations and steps until it gets to lines. Hint: self.detector_used can be found in include/line_detector/line_detector1.py
+
+1. Resize and crop
+2. Setting image in line detector class
+    1. Saving a BGR copy of the image
+    2. Saving an HSV copy of the image
+    3. Detecting the edges of the BGR image
+3. For each color in `white, yellow, red]`, detect lines
+    1. Get color filtered image
+    2. Dilate color filtered image
+    3. Get color filtered edges
+    4. Detect lines in color filtered edges
+    5. Compute normals and centers of these lines
+4. Normalize the pixel coordinates and create segment list.
+
+
+Question 3: For each element of the list, explain how this process is done and why is it done. Apart for evident processes like 2.1., your explaination should be detailed. You will find useful information in the OpenCV documentation. Write your answer in 06-computer-vision.txt.
+
+1. Resize and crop
+
+    The compressed image is resized using an opencv function, and the top portion of the image (up to a height of "top_cutoff") is removed, in order to not detect lines above the "horizon".
+
+2. Setting image in line detector class
+    1. Saving a BGR copy of the image
+
+        We save the image so we can use if for processing later.
+
+    2. Saving an HSV copy of the image
+    
+        We save a copy in HSV format since this format is less sensitive to lightning conditions.
+
+    3. Detecting the edges of the BGR image:
+
+        The Canny algorithm is used (the one I chose to implement).
+        Its steps are:
+        - the image is smoothed with a gaussian blur
+        - the image derivatives are computed by convolving with the Sobel operators.
+        Both of the above steps are seperable 2D convolutions. 
+        - non-maximum suppression: the "edges" that aren't a local maxima are removed
+        - hysterisis thresholding: the values that are between min_threshold and max_threshold are kept only if they are connected to a strong edge. edges below the min_threshold are dropped. 
+        
+3. For each color in `white, yellow, red]`, detect lines
+    1. Get color filtered image
+        For every pixel at position (i, j) in the image, if the color value of the pixel is within the given range for the corresponding color, the value at (i, j) in a boolean mask bw is set.
+
+        This is done so that we can then filter the image with this boolean mask, and obtain an image where only the pixel with the appropriate color.
+         
+    2. Dilate color filtered image
+
+        The dilation is used to widen the area covered by each of these individual colored points in the filtered image. 
+        the getStructuringElement function is used to produce the kernel used to dilate the boolean mask `bw` described above, in order to keep a bigger area around each colored point in the input image.        
+    3. Get color filtered edges
+        
+        By applying the boolean mask `bw` with the `edges` array, which is the result of the Canny algorithm, we are able to refine (or select) the edges that correspond to a given color.
+        
+    4. Detect lines in color filtered edges
+        The probabilistic Hough transform is used to detect lines of each color. I have no idea how it works.
+
+    5. Compute normals and centers of these lines
+
+        Each line is represented by its two endpoints. By taking the slope of the line, -y/x gives the normal.
+
+
+4. Normalize the pixel coordinates and create segment list.
+(out of time, sorry!)
