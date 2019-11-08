@@ -69,18 +69,64 @@ Question 3: For each element of the list, explain how this process is done and w
     2. Dilate color filtered image
 
         The dilation is used to widen the area covered by each of these individual colored points in the filtered image. 
-        the getStructuringElement function is used to produce the kernel used to dilate the boolean mask `bw` described above, in order to keep a bigger area around each colored point in the input image.        
+        the getStructuringElement function is used to produce the kernel used to dilate the boolean mask `bw` described above, in order to keep a bigger area around each colored point in the input image.
+    
     3. Get color filtered edges
         
-        By applying the boolean mask `bw` with the `edges` array, which is the result of the Canny algorithm, we are able to refine (or select) the edges that correspond to a given color.
+        By applying the boolean mask `bw` to the `edges` ndarray, (which is the result of the Canny algorithm), we select the regions of the edges associated with a given color.
         
     4. Detect lines in color filtered edges
         The probabilistic Hough transform is used to detect lines of each color. I have no idea how it works.
 
     5. Compute normals and centers of these lines
+        Each line segment appears to be stored as 2 endpoints:
 
-        Each line is represented by its two endpoints. By taking the slope of the line, -y/x gives the normal.
+        p1(x1, y1) (line[0,1])
+        |
+        |
+        p2(x2, y2) (line[2,3])
 
+        First, the lengths of the line segment is computed by taking the norm of the p1--p2 vector
+        The dx and dy are the horizontal and vertical components of the line.
+        (I do not understand why `lines[:, 3:4]` was used rather than `lines[:, 3]`, which seems to do the same thing)
+        The centers of the lines are calculated as the means of the two endpoints.
+        
+        Then, the points p3(x3, y3) and p4(x4, y4) are calculated by moving 3 units forward and backward in the direction of the normal, from p0 and p1, respectively. This seems to be used as a way to "reach out" past the line endpoints in the either direction.
+        The coordinates of these new points p3 and p4 are then clipped to the [0,width-1] and [0, height-1] ranges, respectively, using the width and height of the boolean mask, (equivalent to the dimensions of the image).
+        
+
+        I'm not sure about line 106 (the definition of flag_signs). It seems to be used to detect which of the two line normal to use (-dy, dx) or (dy, -dx), depending on if one of the ends of the lines go past the boolean mask's coverage for that line or not (but I could definitely be wrong about that).
+
+        The line endpoints are then reordered to respect the right-normal convention, which I believe has to have the normal vector at 90 degrees to the p1->p2 vector, following the right-hand rule.
 
 4. Normalize the pixel coordinates and create segment list.
-(out of time, sorry!)
+    
+    The top cutoff is an offset from the upper left corner to the top of the image, used to cutoff the portion of the camera image which is above the "horizon".
+    The coordinates of the line endpoints are normalized by adding the cutoff back to them (as they were relative to the cutoff in their y coordinates instead of the top left corner of the image), and their x and y coordinates are divided by the width and height of the image, respectively.
+    
+
+Question 4: Does it run well on the simulation? Describe and comment on the results.
+
+    For this question, I chose to implement the Canny algorithm.
+    However, I chose to give myself a challenge and implement the entire algorithm without using for-loops.
+
+    I know it might not have been a great idea, as I made it a lot harder for myself than it would have been to just take the first option. I most definitely wouldn't be writing this so late and so past the deadline if I had chosen otherwise.
+    However, I take this a learning experience and as a fun little endeavour.
+
+    Although I got pretty much everything working and tested (to some extent), I am still trying to find the cause of an annoying bug, whereby the image gradients calculated by convolving the sobel operator on the image are consistently too low to ever be picked up by the hysteresis thresholding.
+    I've tried a few tricks to maybe scale these gradient values up until at least one of them goes above the `upper` threshold (threshold2), but this doesn't seem to solve the problem, as since the gradients are roughly uniformly low, the entire image then becomes either sure edges, or weak-connected images.
+
+    If I do not scale these values up, the hysteresis thresholding simply rejects all the edges, since they are almost always below the lower threshold, and definitely never above the higher threshold.
+
+    Therefore, to answer this question, it does not run well one bit in the simulation, so far, unfortunately. :*(
+
+    In the next few hours (and maybe days), I will most probably try to swap out some portions of the pipeline with the corresponding opencv ops, and then try to run it in the simulator and on the robot. I will most likely replace the image derivative step, even though it is quite straightforward to implement and I trust my code.
+    I hope to then be able to give an update on the performance of my implementation for both the simulator and the real robot, if there is any value in doing so for the grading of this assignment at that point.
+
+Question 5: Is it as fast as the original OpenCV code? Use the time Python library to compare the time does it take to process one image. If there is a difference, why is it the case?
+
+    This is maybe the only really cool thing to come out of this endeavour. On average, my implementation of canny takes about 10-13 milliseconds to execute on my machine, compared to the 1-6 milliseconds of opencv. There is a relatively minor difference, probably due in large part from the memory overhead of python, and because of some array copying operations I've had to put in a few places where the operations weren't easy to vectorize.
+    
+Question 6 Try it on the real robot, using the instructions given in Hardware Exercise 2. Does it work? Compare again the time that it takes to characterize an image on the RaspberryPi. Is it critical?
+
+    I was hoping to show a good performance when executing on the robot, but I am however unable to attest to its performance at this time, as I haven't been able to fully make it work in the simulator. I've heard that some people's code took about 2 seconds to process the segments on one image. Even though it might be slower than the simulator, I was hoping that my implementation wouldn't suffer as badly from the transfer, given that it might make better use of the vectorized operations available in modern processors.

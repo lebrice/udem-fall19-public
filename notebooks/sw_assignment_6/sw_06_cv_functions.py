@@ -41,16 +41,16 @@ def Canny(image, threshold1, threshold2, apertureSize=3):
 		filtered_image = non_maximum_suppression(image, edge_gradients, gradient_directions)
 		result = hysteresis_thresholding(filtered_image, edge_gradients, threshold1, threshold2)
 		expected = cv2.Canny(image, threshold1, threshold2, apertureSize=3)
-		# # print(result.shape, expected.shape)
-		# # print(set(result.flat), set(expected.flat))
-		# # print(np.mean(result), np.mean(expected))
-		# # print(np.count_nonzero(result), np.count_nonzero(expected))
-		# # print(np.median(result), np.median(expected))
-		# # print(np.max(result), np.max(expected))
+		# print(result.shape, expected.shape)
+		# print(set(result.flat), set(expected.flat))
+		# print(np.mean(result), np.mean(expected))
+		# print(np.count_nonzero(result), np.count_nonzero(expected))
+		# print(np.median(result), np.median(expected))
+		# print(np.max(result), np.max(expected))
 		return expected
 		return result
 	except Exception as e:
-		traceback.# print_exc()
+		traceback.print_exc()
 
 def get_image_gradients(image):
 	num_channels = image.shape[-1] if len(image.shape) == 3 else 1
@@ -91,18 +91,18 @@ def hysteresis_thresholding(image, image_gradients, min_val, max_val):
 	"""
 	Perform hysteresis thresholding using some bitwise magic.
 	"""
-	# print("BEFORE HYSTERISIS THRESHOLDING:", image)
-	# print("gradients:", image_gradients)
+	print("BEFORE HYSTERISIS THRESHOLDING:", image)
+	print("gradients:", image_gradients)
 
 	largest_gradient_value = np.max(image_gradients)
 	while largest_gradient_value < max_val:
-		# print("Largest gradient value:", largest_gradient_value)
+		print("Largest gradient value:", largest_gradient_value)
 		warnings.warn(UserWarning("Image has no edge gradients above upper threshold, increasing all gradients values!"))
 		# return np.zeros_like(image)
 		image_gradients *= 1.5
 		largest_gradient_value = np.max(image_gradients)
 	
-	# # print("Largest gradient value:", largest_gradient_value)
+	# print("Largest gradient value:", largest_gradient_value)
 	# the set of all 'strong' indices.
 	strong_indices  = indices_where(image_gradients >= max_val)
 	off_indices 	= indices_where(image_gradients < min_val)
@@ -120,21 +120,21 @@ def hysteresis_thresholding(image, image_gradients, min_val, max_val):
 
 	strong = np.zeros_like(image_gradients, dtype=bool)
 	strong[index_with(strong_indices)] = True
-	# # print("strong:", strong)
+	# print("strong:", strong)
 
 	weak = np.zeros_like(image_gradients, dtype=bool)
 	weak[index_with(weak_indices)] = True
 
 	unexplored_indices = aggregate(np.nonzero(to_explore))
-	# # print("unexplored (initial):", [str(v) for v in unexplored])
-	# # print("weak indices (initial):", [str(v) for v in weak_indices])
-	# # print("off indices (initial):", [str(v) for v in off_indices])
+	# print("unexplored (initial):", [str(v) for v in unexplored])
+	# print("weak indices (initial):", [str(v) for v in weak_indices])
+	# print("off indices (initial):", [str(v) for v in off_indices])
 	already_explored = np.zeros_like(to_explore)
 
 	while len(unexplored_indices) > 0:
 		
-		# # print("exploring indices ", [str(v) for v in indices])
-		# # print(indices)
+		# print("exploring indices ", [str(v) for v in indices])
+		# print(indices)
 
 		neighbours = neighbourhood(unexplored_indices, image_width, image_height)
 		is_neighbour = np.zeros_like(weak)
@@ -143,8 +143,8 @@ def hysteresis_thresholding(image, image_gradients, min_val, max_val):
 		weak_neighbours = aggregate(np.nonzero(is_weak_neighbour))
 		# weak_neighbours = common_rows_between(neighbours, weak_indices)
 
-		# # print("The neighbours of (", ",".join(str(pixel) for pixel in indices), ") are ", neighbours)
-		# # print("weak neighbours:", [str(v) for v in weak_neighbours])
+		# print("The neighbours of (", ",".join(str(pixel) for pixel in indices), ") are ", neighbours)
+		# print("weak neighbours:", [str(v) for v in weak_neighbours])
 		
 		strong[index_with(weak_neighbours)] = True
 		weak[index_with(weak_neighbours)] = False
@@ -161,7 +161,7 @@ def hysteresis_thresholding(image, image_gradients, min_val, max_val):
 	out = np.zeros_like(image_gradients)
 	out[~strong] = 0
 	out[strong] = 255
-	# print("AFTER HYSTERISIS THRESHOLDING:", out)
+	print("AFTER HYSTERISIS THRESHOLDING:", out)
 	return out
 
 
@@ -215,21 +215,21 @@ def neighbourhood(index, image_width, image_height):
 	
 	mask = np.all(mask, axis=-1)
 
-	# # print(mask)
+	# print(mask)
 	# for i, (m, n) in enumerate(zip(mask, neighbours)):
 	# 	if len(index.shape) == 2:
 	# 		for keep, (i, j) in zip(m, n):
-	# 			# print("point", i, j, "is good:", keep)
+	# 			print("point", i, j, "is good:", keep)
 	# 	else:
 	# 		keep = m
 	# 		i, j = n
-	# 		# print("point", i, j, "is good:", keep)
+	# 		print("point", i, j, "is good:", keep)
 		
 	neighbours = neighbours[mask]
 	# get rid of duplicates:
 	neighbours = np.unique(neighbours, axis=0)
 	return neighbours
-	# # # print(image[row, col])
+	# # print(image[row, col])
 	# min_x = max(i-1, 0)
 	# max_x = min(i+1, image_w-1)
 	# min_y = max(j-1, 0)
@@ -239,7 +239,7 @@ def neighbourhood(index, image_width, image_height):
 	# 	for x in range(min_x, max_x + 1)
 	# 	for y in range(min_y, max_y + 1)
 	# )
-	# # print(indices)
+	# print(indices)
 	# indices.discard((i, j))
 	# return indices
 	# # return np.array(indices)
@@ -276,7 +276,7 @@ def non_maximum_suppression(image, image_gradients, gradient_directions):
 		image {[type]} -- the image to preform non-maximum suppresion on.
 		gradient_directions {[type]} -- the gradient directions
 	"""
-	# print("Before non-maximum suppression:", image)
+	print("Before non-maximum suppression:", image)
 	# Get where to check depending on the "direction"
 	direction_offset_x = np.round(np.cos(gradient_directions)).astype(int)
 	direction_offset_y = np.round(np.sin(gradient_directions)).astype(int)
@@ -299,7 +299,7 @@ def non_maximum_suppression(image, image_gradients, gradient_directions):
 	is_local_maximum = higher_than_backward & higher_than_forward
 	out = np.copy(image)
 	out[~is_local_maximum] = 0
-	# print("AFTER non-maximum suppression: ", out)
+	print("AFTER non-maximum suppression: ", out)
 
 	return out
 			
@@ -414,15 +414,15 @@ def gaussian_kernel_1d(std=1, kernel_size=5):
 
 
 def gaussian_blurring(image, std=1, kernel_size=5):
-	# # # print(kernel)
+	# # print(kernel)
 	# kernel = np.expand_dims(kernel, axis=0)
 	# kernel = kernel.T @ kernel
 	# kernel /= np.sum(kernel)
-	# # print("BEFORE GAUSSIAN BLURRING:\n", image)
+	# print("BEFORE GAUSSIAN BLURRING:\n", image)
 
 	kernel = gaussian_kernel_1d(std, kernel_size)
 	image1 = separable_conv2d(image, kernel, padding_mode="constant")
-	# # print("AFTER GAUSSIAN BLURRING1:\n", image1)
+	# print("AFTER GAUSSIAN BLURRING1:\n", image1)
 	
 	return image1
 	# slower alternative from openCV documentation:
@@ -434,7 +434,7 @@ def gaussian_blurring(image, std=1, kernel_size=5):
 		[2, 4, 5, 4, 2]
 	])
 	image2 = conv2d(image, kernel)
-	# print("AFTER GAUSSIAN BLURRING2:\n", image2)
+	print("AFTER GAUSSIAN BLURRING2:\n", image2)
 	return image2
 
 
@@ -472,18 +472,18 @@ def gaussian_derivative_1d(sigma, kernel_size):
 def HoughLinesP(image, rho, theta, threshold, lines, minLineLength, maxLineGap):
 	return cv2.HoughLinesP(image, rho, theta, threshold, lines, minLineLength, maxLineGap)
 
-# # X = np.random.rand(80, 160, 3)
-# X = np.array([
-# 	[0, 0, 0, 0, 0],
-# 	[0, 0, 0, 0, 0],
-# 	[0, 255, 255, 255, 7],
-# 	[5, 0, 23, 3, 6],
-# 	[1, 2, 3, 4, 8],
-# ])
-# X = np.tile(X[..., np.newaxis], (10, 10, 3))
-# X[:,:,1] = X[:,:,0] * 0.5
-# X[:,:,2] = X[:,:,0] * 0.3
+# X = np.random.rand(80, 160, 3)
+X = np.array([
+	[0, 0, 0, 0, 0],
+	[0, 0, 0, 0, 0],
+	[0, 255, 255, 255, 7],
+	[5, 0, 23, 3, 6],
+	[1, 2, 3, 4, 8],
+])
+X = np.tile(X[..., np.newaxis], (10, 10, 3))
+X[:,:,1] = X[:,:,0] * 0.5
+X[:,:,2] = X[:,:,0] * 0.3
 
-# # print(X.shape)
-# bob = Canny(X.astype(np.uint8), 75, 200)
-# # print(bob)
+print(X.shape)
+bob = Canny(X.astype(np.uint8), 75, 200)
+print(bob)
