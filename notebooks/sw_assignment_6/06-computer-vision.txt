@@ -1,6 +1,17 @@
 Fabrice Normandin
 Student ID #20142128
 
+
+------------ UPDATE (2019-11-08)  ------------------- 
+    Upon closer inspection, my great performance results described in question 5 were due to a bug that made my canny implementation fail silently at some early part of the pipeline, without showing any errors.
+    and therefore gave me the impression that the algorithm was taking only 10-13 milliseconds to run, while in actual fact it takes roughly between 50-100ms, depending on the number of detected 'strong' edges.
+    I guess that 100ms, while not amazing, isn't too shabby either. It isn't quite fast enough for real-time.
+    
+    In any case, I did not change any portion of the text below, and did no functional modification to the submitted code, appart from very minor tidying.
+    I am submitting this again just to clarify the above-mentioned situation.
+----------------------------------------------------
+
+
 TIP: if you're using Visual Studio Code to read this, enable word-wrap, using (Alt+Z) or in the "view" -> "toggle word wrap" option.
 
 Question 1: What is the role of this node? Describe shortly its input and its outputs. Write your answer in a 06-computer-vision.txt file.
@@ -124,6 +135,8 @@ Question 4: Does it run well on the simulation? Describe and comment on the resu
     I hope to then be able to give an update on the performance of my implementation for both the simulator and the real robot, if there is any value in doing so for the grading of this assignment at that point.
 
 Question 5: Is it as fast as the original OpenCV code? Use the time Python library to compare the time does it take to process one image. If there is a difference, why is it the case?
+
+
 
     This is maybe the only really cool thing to come out of this endeavour. On average, my implementation of canny takes about 10-13 milliseconds to execute on my machine, compared to the 1-6 milliseconds of opencv. There is a relatively minor difference, probably due in large part from the memory overhead of python, and because of some array copying operations I've had to put in a few places where the operations weren't easy to vectorize.
     
