@@ -22,6 +22,73 @@ import copy
 
 import rospy
 
+def wrap(angle):
+    """Takes in any angle (in radians), and expresses it inside the [-np.pi, np.pi] range.
+    
+    Arguments:
+        angle {float} -- An angle in radians
+    
+    Returns:
+        float -- The angle projected within the range (-np.pi, np.pi]
+    """
+    two_pi = 2 * np.pi
+    angle %= two_pi
+    if angle < 0:
+        angle += two_pi
+    # angle is now inside [0, 2pi]
+    if angle > np.pi:
+        angle -= two_pi
+    assert (- np.pi) < angle <= np.pi
+    return angle
+
+def R(theta):
+    return np.array([
+        [np.cos(theta), -np.sin(theta)],
+        [np.sin(theta), np.cos(theta)]
+    ])
+
+
+def TR(theta_rad, Ax, Ay):
+    return np.array([
+        [np.cos(theta_rad), -np.sin(theta_rad), Ax],
+        [np.sin(theta_rad),  np.cos(theta_rad), Ay],
+        [0, 0, 1],
+    ])
+
+
+def update_past_path_point_coordinates(self, timer_event):
+    """
+    After each timestep, we update the coordinates of the points we stored in the buffer
+    """
+    if timer_event.last_real is None:
+        self.logwarn("Can't update past point coordinates as the timer_event has last_real of None.")
+        return
+    duration = rospy.Time.now() - timer_event.last_real
+    delta_t = duration.secs + duration.nsecs / 1e9
+    self.logdebug("delta_t: {}".format(delta_t))
+    
+    # change in heading: alpha = omega * dt
+    alpha = self.omega * delta_t
+    # displacement in the x and y direction.
+    delta_x = self.v * np.cos(alpha)
+    delta_y = self.v * np.sin(alpha)
+    displacement = np.asarray([
+        delta_x, delta_y
+    ])
+    rotation = R(alpha)
+
+    def update_point(point):
+        old_pos = point_to_np(point)
+        new_pos = old_pos - displacement
+        new_pos = np.matmul(rotation, new_pos)
+        point.x = new_pos[0]
+        point.y = new_pos[1]
+        return point
+
+    with self.points_lock:
+        for color, old_points_buffer in self.points.items():
+            self.points[color] = collections.deque([update_point(p) for p in old_points_buffer])
+    self.logdebug("Updated Points successfully.")
 
 class LaneFitlerParticle(Configurable, LaneFilterInterface):
 
@@ -46,6 +113,30 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
             # Your code here
             # TODO: When predicting the new d, you will need to take into account the angle phi.
             ########
+
+            # change in heading: alpha = omega * dt
+            alpha = w * dt
+            # displacement in the x and y direction.
+            delta_x = dt * v * np.cos(alpha)
+            delta_y = dt * v * np.sin(alpha)
+            displacement = np.asarray([
+                delta_x, delta_y
+            ])
+            rotation = R(alpha)
+
+            def update_point(point):
+                old_pos = point_to_np(point)
+                new_pos = old_pos - displacement
+                new_pos = np.matmul(rotation, new_pos)
+                point.x = new_pos[0]
+                point.y = new_pos[1]
+                return point
+
+
+
+
+
+
             self.d = new_d
             self.phi = new_phi
 
