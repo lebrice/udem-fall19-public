@@ -1,0 +1,79 @@
+Fabrice Normandin
+Student ID 20142128
+
+(As usual, for ease of reading I'd suggest turning Word-Wrap on in your text viewer when reading this.)
+
+Question 1: List these topics and describe shortly the information they transmit.
+
+    Subscribed topics:
+        - segment_list:
+            This is the list of image line segments after  ground projection. They are used to produce the estimate of the robot's lane position. 
+
+        TODO: figure out which controller is the one publishing to car_cmd.
+
+        - car_cmd:
+            The car_cmd topic is published to by the <controller node>. The lane filter node uses the latest velocity and steering angles commanded to the wheels to update the belief.
+
+        TODO: Why doesn't this node use an actual input from inverse kinematics node, which would give us the "actual" displacement of the robot? 
+
+        - change_params:
+            This topic is used to change some parameters of the filter. The data to set is passed as a JSON dictionary:
+            {
+                "params": {
+                    <param_name>: <param_value>
+                }
+            }
+            and the attributes of the "self.filter" object are then changed for a given period of time, before being set back to their original values. 
+
+        - switch:
+            The switch is used by the FSM to turn this node on or off.
+        - fsm_mode:
+            Does nothing. Could be used to change `self.active`
+
+    Published topics:
+        - lane_pose:
+            This is the main output of the lane_filter node. It corresponds to the distance from the center of the right lane, `d`, and the heading angle, `phi`. It is obtained by querying the currently used filter.
+        - belief_img:
+            This topic is published to for debugging and visualization purposes. It shows an image produced from the historgram filter's belief matrix, where the pixel intensity is related to the density in the corresponding bin of the histogram filter.
+        - seglist_filtered:
+            This topic is used to provide other nodes with the subset of the segment_list entries which happen to be located within the "high probability" region of the filter, such that these segments are those which were most confidently used to produce the lane pose estimate. 
+        - in_lane:
+            Topic on which a boolean is published which indicates if the filter has a reasonably confident idea of where the robot is in the lane. 
+
+Question 2 How is the belief represented in the histogram filter? How is it initialized?
+
+    The belief is represented as a two-dimensional grid, with an axis going from d_min to d_max, and another going from phi_min to phi_max.
+    It is initialized using a multivariate normal distribution centered at the center of the grid.
+
+
+Question 3 Look at the measurement update function. Note that from a single segment, one can geometrically determine a corresponding (d, phi) pair through simple geometric considerations. This is done in the generateVote() function. Knowing this, describe shortly how is the likelihood p(z(t)|x(t)) computed.
+
+    The likelihood is computed by placing each segment's "vote" (the estimated (d, phi) pair) into the corresponding bin. The grid of bins is normalized by diving all the entries with the sum of all the bin's counts. This in effect transforms the normalized grid into a likelihood or probability distribution.
+
+
+Question 4 In 07-state-estimation.txt file, describe your implementation for each of the 6 functions.
+
+    - Particle.predict(self, dt, v, w):
+
+    - Particle.update(self, ds, phis)
+
+    - lane_filter.initialize(self)
+
+    - lane_filter.resample(self)
+
+    - lane_filter.getEstimate(self)
+
+    - lane_filter.isInLane(self)
+
+
+Question 5 Does it work? If not, describe and explain what is happening?
+
+Question 6 How is the particle filter able to deal with wrong line detections, due to Duckies in the image for example?
+
+Question 7 Would a particle filter be able to recover from a wrong estimation, or from an unexpected initial state? Which parameters have an influence here? What is the counterbalance of making the particle filter robust to such a possibility?
+
+Question 8 Explain the influence of the number of particles. What is the limiting factor?
+
+Question 9 Compare the particle filter to the histogram filter. What are the pros and cons of each? Could a Kalman filter work here?
+
+BONUS Run the launch file on a real robot. Does it work? Describe. If there is a difference with the simulation: why is it so? What can you do to make it more robust?

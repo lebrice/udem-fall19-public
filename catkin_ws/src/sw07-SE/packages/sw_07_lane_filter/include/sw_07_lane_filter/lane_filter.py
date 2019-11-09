@@ -44,6 +44,7 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
             new_phi = self.phi 
             ########
             # Your code here
+            # TODO: When predicting the new d, you will need to take into account the angle phi.
             ########
             self.d = new_d
             self.phi = new_phi
@@ -54,6 +55,11 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
             new_weight = 1
             ########
             # Your code here
+            # TODO: How can you estimate the likelihood of the measurements given this particular particle?
+            # Here, the d and phi values for a given segment can be recovered using function self.process(segment).
+            # Suggestion: remember how it was done in the histogram filter.
+            # Maybe you can compute a distance from your particle to each measured pair of (d,phi)
+            # and compute a score based on the quantity of pairs that is not further than a given threshold? Other ideas are welcome too!
             ########
             self.weight = new_weight
 
@@ -118,6 +124,10 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
             phi = 0
         ########
         # Your code here
+        # TODO: Initialize the particle set using a given distribution.
+        # You can use the initialization parameters.
+        # Would sampling from a Gaussian distribution be a good idea?
+        # Could you also want to sample from an uniform distribution, in order to be able to recover from an initial state that is far from the Gaussian center?
         ########
             initial_particles.append(self.Particle(d, phi, config))
         self.particles = initial_particles
@@ -151,6 +161,7 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
         new_particles = self.particles
         ########
         # Your code here
+        # TODO: Generate a new set of particles by sampling from the weighted previous set.
         ########
         self.particles = new_particles
 
@@ -167,6 +178,7 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
         phi = 0
         ########
         # Your code here
+        # TODO: What is the best way to give an estimate of the state given a set of particles? Would it be a random sampling? An average? Putting them in bins and chosing the most populated one?
         ########
 
         return [d, phi]
@@ -176,6 +188,7 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
         in_lane = True
         ########
         # Your code here
+        # TODO: Remember the way the histogram filter was determining if the robot is or is not in the lane. What was the idea behind it? How could this be applied to a particle filter?
         ########
         return in_lane
 
@@ -414,7 +427,7 @@ class LaneFilterHistogram(Configurable, LaneFilterInterface):
                 continue
             i = int(floor((d_i - self.d_min) / self.delta_d))
             j = int(floor((phi_i - self.phi_min) / self.delta_phi))
-            measurement_likelihood[i, j] = measurement_likelihood[i, j] + 1
+            measurement_likelihood[i, j] += 1
         if np.linalg.norm(measurement_likelihood) == 0:
             return None
         measurement_likelihood = measurement_likelihood / np.sum(measurement_likelihood)

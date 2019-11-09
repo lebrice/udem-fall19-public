@@ -56,17 +56,25 @@ class LaneFilterNode(object):
         reset_time = data["time"]
         # Set all paramters which need to be updated
         for param_name in params.keys():
-            param_val = params[param_name]
-            params[param_name] = eval("self.filter." + str(param_name))
-            exec("self.filter." + str(param_name) + "=" + str(param_val))
+            new_value = params[param_name]
+            # This is equivalent, but simpler.
+            # TODO: Might not actually be equivalent, since the param_name might have "." in it, making the "eval" option work on recursive assignment.
+            old_value = getattr(self.filter, param_name) 
+            params[param_name] = old_value
+            # params[param_name] = eval("self.filter." + str(param_name))
+            
+            setattr(self.filter, param_name, new_value)
+            # exec("self.filter." + str(param_name) + "=" + str(param_val))
 
         # Sleep for reset time
         rospy.sleep(reset_time)
 
         # Reset parameters to old values
         for param_name in params.keys():
-            param_val = params[param_name]
-            exec("self.filter." + str(param_name) + "=" + str(param_val))
+            old_value = params[param_name]
+            
+            setattr(self.filter, param_name, old_value)
+            # exec("self.filter." + str(param_name) + "=" + str(param_val))
 
 
     def updateParams(self, event):
@@ -83,7 +91,7 @@ class LaneFilterNode(object):
         self.active = switch_msg.data
 
 
-    def processSegments(self,segment_list_msg):
+    def processSegments(self, segment_list_msg):
         # Get actual timestamp for latency measurement
         timestamp_now = rospy.Time.now()
 
