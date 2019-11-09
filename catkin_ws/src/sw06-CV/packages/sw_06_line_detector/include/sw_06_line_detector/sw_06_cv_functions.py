@@ -40,14 +40,6 @@ def Canny(image, threshold1, threshold2, apertureSize=3):
 
 		filtered_image = non_maximum_suppression(image, edge_gradients, gradient_directions)
 		result = hysteresis_thresholding(filtered_image, edge_gradients, threshold1, threshold2)
-		expected = cv2.Canny(image, threshold1, threshold2, apertureSize=3)
-		# # print(result.shape, expected.shape)
-		# # print(set(result.flat), set(expected.flat))
-		# # print(np.mean(result), np.mean(expected))
-		# # print(np.count_nonzero(result), np.count_nonzero(expected))
-		# # print(np.median(result), np.median(expected))
-		# # print(np.max(result), np.max(expected))
-		# return expected
 		return result
 	except Exception as e:
 		traceback.print_exc()
@@ -468,25 +460,50 @@ def gaussian_derivative_1d(sigma, kernel_size):
 def HoughLinesP(image, rho, theta, threshold, lines, minLineLength, maxLineGap):
 	return cv2.HoughLinesP(image, rho, theta, threshold, lines, minLineLength, maxLineGap)
 
-# import matplotlib.pyplot as plt
-# bob = plt.imread("bob.jpg")
-# print(bob.shape)
-# result = Canny(bob, 75, 200)
-# print(result)
-# plt.imshow(result, cmap="gray")
-# plt.show()
-# # X = np.random.rand(80, 160, 3)
-# X = np.array([
-# 	[0, 0, 0, 0, 0],
-# 	[0, 0, 0, 0, 0],
-# 	[0, 255, 255, 255, 7],
-# 	[5, 0, 23, 3, 6],
-# 	[1, 2, 3, 4, 8],
-# ])
-# X = np.tile(X[..., np.newaxis], (10, 10, 3))
-# X[:,:,1] = X[:,:,0] * 0.5
-# X[:,:,2] = X[:,:,0] * 0.3
 
-# # print(X.shape)
-# bob = Canny(X.astype(np.uint8), 75, 200)
-# # print(bob)
+if __name__ == "__main__":
+	import time
+
+	def timeit(method):
+		def timed(*args, **kwargs):
+			start_time = time.time()
+			result = method(*args, **kwargs)
+			end_time = time.time()
+			print(f"{method.__name__} {(end_time - start_time) * 1000 :2.2f} ms")
+			return result
+		return timed
+	
+	@timeit
+	def cv2_canny(image, threshold1, threshold2):
+		expected = cv2.Canny(image, threshold1, threshold2, apertureSize=3)
+		return expected
+	
+	@timeit
+	def my_canny(image, threshold1, threshold2):
+		result = Canny(image, threshold1, threshold2, apertureSize=3)
+		return result
+
+	# X = np.array([
+	# 	[0, 0, 0, 0, 0],
+	# 	[0, 0, 0, 0, 0],
+	# 	[0, 255, 255, 255, 7],
+	# 	[5, 0, 23, 3, 6],
+	# 	[1, 2, 3, 4, 8],
+	# ])
+	# X = np.tile(X[..., np.newaxis], (10, 10, 3))
+	# X[:,:,1] = X[:,:,0] * 0.5
+	# X[:,:,2] = X[:,:,0] * 0.3
+
+	image = (np.random.rand(80, 160, 3) * 255).astype(np.uint8)
+	threshold1, threshold2 = 75, 200
+	expected = cv2_canny(image, threshold1, threshold2)
+	result = my_canny(image, threshold1, threshold2)
+	print("Expected:", expected)
+	print("Result:", result)
+	print(result.shape, expected.shape)
+	print(set(result.flat), set(expected.flat))
+	print(np.mean(result), np.mean(expected))
+	print(np.count_nonzero(result), np.count_nonzero(expected))
+	print(np.median(result), np.median(expected))
+	print(np.max(result), np.max(expected))
+
