@@ -48,6 +48,14 @@ def R(theta):
     ])
 
 
+
+
+def cos_sin(x):
+    return np.array([
+        np.cos(x),
+        np.sin(x),
+    ])
+
 def TR(theta_rad, Ax, Ay):
     return np.array([
         [np.cos(theta_rad), -np.sin(theta_rad), Ax],
@@ -70,6 +78,7 @@ def update_past_path_point_coordinates(self, timer_event):
     # change in heading: alpha = omega * dt
     alpha = self.omega * delta_t
     # displacement in the x and y direction.
+    # NOTE: missing dt!
     delta_x = self.v * np.cos(alpha)
     delta_y = self.v * np.sin(alpha)
     displacement = np.asarray([
@@ -107,39 +116,39 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
 
         def predict(self, dt, v, w):
             # Update d and phi depending on dt, v and w
-            new_d = self.d 
-            new_phi = self.phi 
+            # new_d = self.d 
+            # new_phi = self.phi 
             ########
             # Your code here
             # TODO: When predicting the new d, you will need to take into account the angle phi.
             ########
 
-            # change in heading: alpha = omega * dt
-            alpha = w * dt
-            # displacement in the x and y direction.
-            delta_x = dt * v * np.cos(alpha)
-            delta_y = dt * v * np.sin(alpha)
-            displacement = np.asarray([
-                delta_x, delta_y
-            ])
-            rotation = R(alpha)
+            if w == 0:
+                displacement = dt * v * np.array([
+                    np.sin(phi),
+                    np.cos(phi),
+                ])
+            else:
+                # calculate the displacement due to omega
+                angle_performed_along_circle = dt * w
+                tangential_velocity = v
+                angular_velocity = w
+                radius_of_curvature = np.abs(tangential_velocity / angular_velocity)
+                
+                dx = radius_of_curvature * (1 - np.cos(angle_performed_along_circle))
+                dy = radius_of_curvature * np.sin(angle_performed_along_circle)
+                
+                # This displacement is in the frame with heading phi though.
+                # Therefore we need to correct for that as well.
+                rotation = R(-phi)
+                displacement = np.array([dx, dy]) @ rotation
 
-            def update_point(point):
-                old_pos = point_to_np(point)
-                new_pos = old_pos - displacement
-                new_pos = np.matmul(rotation, new_pos)
-                point.x = new_pos[0]
-                point.y = new_pos[1]
-                return point
+            dx = displacement[0]
+            dy = displacement[1]
 
-
-
-
-
-
-            self.d = new_d
-            self.phi = new_phi
-
+            self.d += dx
+            self.phi = np.arctan2(dx, dy)
+            
         def update(self, ds, phis):
             # Change weight depending on the likelihood of ds and phis from the measurements
 
