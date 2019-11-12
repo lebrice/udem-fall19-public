@@ -77,14 +77,17 @@ Question 4 In 07-state-estimation.txt file, describe your implementation for eac
         In order to prevent potentially updating a particle multiple times, we create copies of the particles which are sampled multiple times, such that in the end we end up with the same number of particles as before, and each of them is a separate, distinct object.
         
     - lane_filter.getEstimate(self)
+        I used a weighted average of the d's and phi's of each particle.
+        To do this, we first calculate the normalized weight vector, by diving the weight vector by its sum. The estimates for d and phi are the dot products between this normalized weight vector and the ds and phis of the particles, respectively.
 
     - lane_filter.isInLane(self)
+        Using the same kind of mechanism as the Historgram filter for now, where I check the maximal weight value vs a predetermined minimal maximal weight.
+        If any particle has a weight whose value is greater than `self.min_max`, then that particle is reasonably confident, and the robot must have a LanePose.
 
 
 Question 5 Does it work? If not, describe and explain what is happening?
 
 Question 6 How is the particle filter able to deal with wrong line detections, due to Duckies in the image for example?
-
 
 Question 7 Would a particle filter be able to recover from a wrong estimation, or from an unexpected initial state? Which parameters have an influence here? What is the counterbalance of making the particle filter robust to such a possibility?
 
