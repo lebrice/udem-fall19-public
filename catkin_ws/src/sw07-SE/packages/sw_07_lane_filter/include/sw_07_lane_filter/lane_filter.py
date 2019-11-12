@@ -50,7 +50,7 @@ def R(theta):
 
 
 
-def cos_sin(x):
+def cos_and_sin(x):
     return np.array([
         np.cos(x),
         np.sin(x),
@@ -116,38 +116,42 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
 
         def predict(self, dt, v, w):
             # Update d and phi depending on dt, v and w
-            # new_d = self.d 
-            # new_phi = self.phi 
-            ########
-            # Your code here
-            # TODO: When predicting the new d, you will need to take into account the angle phi.
-            ########
-
+            # lets's consider the displacement with respect to the previous position:
+            #      ^(x)
+            # (y)  |
+            # <----|
+            
+            # hence displacment is (y, x), with:
+            # - X is the displacement in direction parallel to the lane
+            # - Y is the displacement in the direction perpendicular to the lane.
             if w == 0:
-                displacement = dt * v * np.array([
-                    np.sin(phi),
-                    np.cos(phi),
-                ])
+                # going in a straight line.
+                displacement = dt * v * cos_and_sin(self.phi)
+                # d is displaced in 'y', and phi stays the same.
+                self.d += displacement[1]
             else:
                 # calculate the displacement due to omega
-                angle_performed_along_circle = dt * w
+                angle_performed_along_arc = dt * w
                 tangential_velocity = v
                 angular_velocity = w
                 radius_of_curvature = np.abs(tangential_velocity / angular_velocity)
+
+                # get the projections of the distance traveled relative to current heading phi.
+                dx = radius_of_curvature * np.sin(angle_performed_along_arc)
+                dy = radius_of_curvature * (1 - np.cos(angle_performed_along_arc))
                 
-                dx = radius_of_curvature * (1 - np.cos(angle_performed_along_circle))
-                dy = radius_of_curvature * np.sin(angle_performed_along_circle)
                 
                 # This displacement is in the frame with heading phi though.
-                # Therefore we need to correct for that as well.
+                # Therefore we need to correct for that as well by rotating it by -phi.
                 rotation = R(-phi)
-                displacement = np.array([dx, dy]) @ rotation
-
-            dx = displacement[0]
-            dy = displacement[1]
-
-            self.d += dx
-            self.phi = np.arctan2(dx, dy)
+                displacement = np.array([dy, dx]) @ rotation
+                
+                # The orientation changed since we moved along the arc.
+                # It can easily be shown that the change in phi due to the arc motion
+                # is equal to the angle performed along the arc.
+                change_in_phi = angle_performed_along_arc
+                self.phi += change_in_phi
+                self.d += displacement[1]
             
         def update(self, ds, phis):
             # Change weight depending on the likelihood of ds and phis from the measurements
