@@ -56,6 +56,7 @@ def cos_and_sin(x):
         np.sin(x),
     ])
 
+
 def TR(theta_rad, Ax, Ay):
     return np.array([
         [np.cos(theta_rad), -np.sin(theta_rad), Ax],
@@ -63,41 +64,6 @@ def TR(theta_rad, Ax, Ay):
         [0, 0, 1],
     ])
 
-
-def update_past_path_point_coordinates(self, timer_event):
-    """
-    After each timestep, we update the coordinates of the points we stored in the buffer
-    """
-    if timer_event.last_real is None:
-        self.logwarn("Can't update past point coordinates as the timer_event has last_real of None.")
-        return
-    duration = rospy.Time.now() - timer_event.last_real
-    delta_t = duration.secs + duration.nsecs / 1e9
-    self.logdebug("delta_t: {}".format(delta_t))
-    
-    # change in heading: alpha = omega * dt
-    alpha = self.omega * delta_t
-    # displacement in the x and y direction.
-    # NOTE: missing dt!
-    delta_x = self.v * np.cos(alpha)
-    delta_y = self.v * np.sin(alpha)
-    displacement = np.asarray([
-        delta_x, delta_y
-    ])
-    rotation = R(alpha)
-
-    def update_point(point):
-        old_pos = point_to_np(point)
-        new_pos = old_pos - displacement
-        new_pos = np.matmul(rotation, new_pos)
-        point.x = new_pos[0]
-        point.y = new_pos[1]
-        return point
-
-    with self.points_lock:
-        for color, old_points_buffer in self.points.items():
-            self.points[color] = collections.deque([update_point(p) for p in old_points_buffer])
-    self.logdebug("Updated Points successfully.")
 
 class LaneFitlerParticle(Configurable, LaneFilterInterface):
 
@@ -115,15 +81,24 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
             self.sigma_phi = config['sigma_phi']
 
         def predict(self, dt, v, w):
-            # Update d and phi depending on dt, v and w
-            # lets's consider the displacement with respect to the previous position:
-            #      ^(x)
-            # (y)  |
-            # <----|
+            """update d and phi depending on dt, v and w
             
-            # hence displacment is (y, x), with:
-            # - X is the displacement in direction parallel to the lane
-            # - Y is the displacement in the direction perpendicular to the lane.
+            Arguments:
+                dt {float} -- [the time delay elapsed since the last prediction.]
+                v {[type]} -- [the commanded linear (tangential) velocity of the robot]
+                w {[type]} -- [the commanded angular velocity of the robot]
+            
+             lets's consider the displacement with respect to the previous position:
+                  ^(x)
+            (y)   |
+             <----|
+            
+            
+            The displacement is (y, x), with:
+            - X is the displacement in direction parallel to the lane
+            - Y is the displacement in the direction perpendicular to the lane.
+            
+            """
             if w == 0:
                 # going in a straight line.
                 displacement = dt * v * cos_and_sin(self.phi)
@@ -152,11 +127,14 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
                 change_in_phi = angle_performed_along_arc
                 self.phi += change_in_phi
                 self.d += displacement[1]
-            
+
+            # We clip d and phi to stay within the desired maximal range
+            self.d = np.clip(self.d, self.d_min, self.d_max)
+            self.phi = np.clip(self.phi, self.phi_min, self.phi_max)
+
         def update(self, ds, phis):
             # Change weight depending on the likelihood of ds and phis from the measurements
 
-            new_weight = 1
             ########
             # Your code here
             # TODO: How can you estimate the likelihood of the measurements given this particular particle?
@@ -165,7 +143,13 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
             # Maybe you can compute a distance from your particle to each measured pair of (d,phi)
             # and compute a score based on the quantity of pairs that is not further than a given threshold? Other ideas are welcome too!
             ########
-            self.weight = new_weight
+
+            normalized_d_distances = ((ds - self.d) / (self.d_max - self.d_min)) ** 2
+            normalized_phi_distances = ((phis - self.phi) / (self.phi_max - self.phi_min)) ** 2
+
+            # this is the normalized average distance (between 0 and 1)
+            average_distance = np.mean(normalized_d_distances + normalized_phi_distances) / 2
+            self.weight = 1 - average_distance
 
         def perturb(self, dd, dphi):
             self.d += dd
@@ -206,6 +190,14 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
 
         # Attributes
         self.particles = []
+        self.particle_config = {
+            'd_max': self.d_max,
+            'd_min': self.d_min,
+            'phi_max': self.phi_max,
+            'phi_min': self.phi_min,  
+            'sigma_d': self.sigma_d,      
+            'sigma_phi': self.sigma_phi,   
+        }
 
         # Initialization
         self.initialize()
@@ -215,17 +207,14 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
         initial_particles = []
 
         # Parameters to be passed
-        config = {}
-        config['d_max'] = self.d_max
-        config['d_min'] = self.d_min
-        config['phi_max'] = self.phi_max
-        config['phi_min'] = self.phi_min  
-        config['sigma_d'] = self.sigma_d      
-        config['sigma_phi'] = self.sigma_phi      
+        config = self.particle_config
 
+        ds = np.random.uniform(self.d_min, self.d_max, size=self.nb_particles)
+        phis = np.random.uniform(self.phi_min, self.phi_max, size=self.nb_particles)
         for i in range(self.nb_particles):
             d = 0
             phi = 0
+
         ########
         # Your code here
         # TODO: Initialize the particle set using a given distribution.
@@ -233,7 +222,7 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
         # Would sampling from a Gaussian distribution be a good idea?
         # Could you also want to sample from an uniform distribution, in order to be able to recover from an initial state that is far from the Gaussian center?
         ########
-            initial_particles.append(self.Particle(d, phi, config))
+            initial_particles.append(self.Particle(ds[i], phis[i], config))
         self.particles = initial_particles
 
     def predict(self, dt, v, w):
@@ -262,11 +251,23 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
         
     def resample(self):
         # Sample a new set of particles
-        new_particles = self.particles
-        ########
-        # Your code here
-        # TODO: Generate a new set of particles by sampling from the weighted previous set.
-        ########
+        weights = np.array([p.weight for p in self.particles])
+        probabilities = weights / np.sum(weights)
+        indices_to_keep = np.random.choice(self.nb_particles, size=self.nb_particles, p=probabilities)
+
+        indices_kept = set()
+        new_particles = []
+        for index in indices_to_keep:
+            particle = self.particles[index]
+
+            if index in indices_kept:
+                # if we already have this particle, make a new copy:
+                particle = self.Particle(particle.d, particle.phi, self.particle_config)
+                new_particles.append(particle)
+            else:
+                # if we haven't sampled this particle already, just add it:
+                new_particles.append(particle)
+                indices_kept.add(index)
         self.particles = new_particles
 
     def roughen(self):
@@ -282,19 +283,29 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
         phi = 0
         ########
         # Your code here
-        # TODO: What is the best way to give an estimate of the state given a set of particles? Would it be a random sampling? An average? Putting them in bins and chosing the most populated one?
+        # TODO: What is the best way to give an estimate of the state given a set of particles?
+        # Would it be a random sampling? An average? Putting them in bins and chosing the most populated one?
         ########
 
+        # Here we perform a weighted average of the particles.
+        ds = np.array([p.d for p in self.particles])
+        phis = np.array([p.phi for p in self.particles])
+        weights = np.array([p.weight for p in self.particles])
+        weights /= np.sum(weights)
+
+        d = np.dot(weights, ds)
+        phi = np.dot(weights, phis)
         return [d, phi]
 
+    
     def isInLane(self):
         # Test to know if the bot is in the lane
-        in_lane = True
         ########
         # Your code here
-        # TODO: Remember the way the histogram filter was determining if the robot is or is not in the lane. What was the idea behind it? How could this be applied to a particle filter?
+        # TODO: Remember the way the histogram filter was determining if the robot is or is not in the lane.
+        # What was the idea behind it? How could this be applied to a particle filter?
         ########
-        return in_lane
+        return  max(p.weight for p in self.particles) > self.min_max
 
 ### Other functions - no modification needed ###
     def process(self, segment):

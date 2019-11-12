@@ -48,19 +48,34 @@ Question 2 How is the belief represented in the histogram filter? How is it init
 
 Question 3 Look at the measurement update function. Note that from a single segment, one can geometrically determine a corresponding (d, phi) pair through simple geometric considerations. This is done in the generateVote() function. Knowing this, describe shortly how is the likelihood p(z(t)|x(t)) computed.
 
-    The likelihood is computed by placing each segment's "vote" (the estimated (d, phi) pair) into the corresponding bin. The grid of bins is normalized by diving all the entries with the sum of all the bin's counts. This in effect transforms the normalized grid into a likelihood or probability distribution.
+    The likelihood is computed by placing each segment's "vote" (the estimated (d, phi) pair) into the corresponding bin. The grid of bins is normalized by diving all the entries with the sum of all the bin's counts. This in effect transforms the normalized grid into a likelihood or probability distribution over ds and phis.
 
 
 Question 4 In 07-state-estimation.txt file, describe your implementation for each of the 6 functions.
 
+    The implementations of each function are well described in the code, and I do believe that good code should speak for itself. I therefore invite the reader to check out the related portions of the source code. I will only briefly mention the high-level decisions related to each method here.
+
     - Particle.predict(self, dt, v, w):
+        We calculate the displacement of the robot with respect to the lane, and then update d by the perpendicular displacement and update phi by the change of orientation due to the curved path.
 
     - Particle.update(self, ds, phis)
+        Here, each particle's weights are updated by using the averaged normalized `d` and `phi` distances. In other words, each particle has a weight between 0 and 1, determined like so:
+
+            normalized_d_distances = ((ds - self.d) / (self.d_max - self.d_min)) ** 2
+            normalized_phi_distances = ((phis - self.phi) / (self.phi_max - self.phi_min)) ** 2
+
+            # this is the normalized average distance (between 0 and 1)
+            average_distance = np.mean(normalized_d_distances + normalized_phi_distances) / 2
+            self.weight = 1 - average_distance
 
     - lane_filter.initialize(self)
+        The d's and phi's are both sampled from uniform distributions over their respective range.
+
 
     - lane_filter.resample(self)
-
+        A sampling probability vector (`probabilities`) can be created for all the particles by normalizing their weights to sum up to 1. We then use `np.random.choice(self.nb_particle, size=self.nb_particles, p=probabilities)` to get an array of indices, sampled with replacement, and therefore we may have duplicate Particles.
+        In order to prevent potentially updating a particle multiple times, we create copies of the particles which are sampled multiple times, such that in the end we end up with the same number of particles as before, and each of them is a separate, distinct object.
+        
     - lane_filter.getEstimate(self)
 
     - lane_filter.isInLane(self)
@@ -69,6 +84,7 @@ Question 4 In 07-state-estimation.txt file, describe your implementation for eac
 Question 5 Does it work? If not, describe and explain what is happening?
 
 Question 6 How is the particle filter able to deal with wrong line detections, due to Duckies in the image for example?
+
 
 Question 7 Would a particle filter be able to recover from a wrong estimation, or from an unexpected initial state? Which parameters have an influence here? What is the counterbalance of making the particle filter robust to such a possibility?
 
