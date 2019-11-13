@@ -44,7 +44,7 @@ def wrap(angle):
 def R(theta):
     return np.array([
         [np.cos(theta), -np.sin(theta)],
-        [np.sin(theta), np.cos(theta)]
+        [np.sin(theta),  np.cos(theta)],
     ])
 
 
@@ -99,6 +99,9 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
             - Y is the displacement in the direction perpendicular to the lane.
             
             """
+            # DT bug.
+            dt *= 0.15
+
             if w == 0:
                 # going in a straight line.
                 displacement = dt * v * cos_and_sin(self.phi)
@@ -118,8 +121,8 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
                 
                 # This displacement is in the frame with heading phi though.
                 # Therefore we need to correct for that as well by rotating it by -phi.
-                rotation = R(-phi)
-                displacement = np.array([dy, dx]) @ rotation
+                rotation = R(-self.phi)
+                displacement = np.matmul(np.array([dy, dx]), rotation)
                 
                 # The orientation changed since we moved along the arc.
                 # It can easily be shown that the change in phi due to the arc motion
@@ -127,6 +130,9 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
                 change_in_phi = angle_performed_along_arc
                 self.phi += change_in_phi
                 self.d += displacement[1]
+
+            self.d += np.random.normal(0, self.sigma_d)
+            self.phi += np.random.normal(0, self.sigma_phi)
 
             # We clip d and phi to stay within the desired maximal range
             self.d = np.clip(self.d, self.d_min, self.d_max)
@@ -143,17 +149,21 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
             # Maybe you can compute a distance from your particle to each measured pair of (d,phi)
             # and compute a score based on the quantity of pairs that is not further than a given threshold? Other ideas are welcome too!
             ########
-
-            normalized_d_distances = ((ds - self.d) / (self.d_max - self.d_min)) ** 2
-            normalized_phi_distances = ((phis - self.phi) / (self.phi_max - self.phi_min)) ** 2
-
-            # this is the normalized average distance (between 0 and 1)
-            average_distance = np.mean(normalized_d_distances + normalized_phi_distances) / 2
+            average_distance = 0
+            if len(ds) > 0 and len(phis) > 0: 
+                normalized_d_distances = ((ds - self.d) / (self.d_max - self.d_min)) ** 2
+                normalized_phi_distances = ((phis - self.phi) / (self.phi_max - self.phi_min)) ** 2
+                # this is the normalized average distance (between 0 and 1)
+                average_distance = np.mean(normalized_d_distances + normalized_phi_distances) / 2
             self.weight = 1 - average_distance
 
         def perturb(self, dd, dphi):
             self.d += dd
             self.phi += dphi
+            # We clip d and phi to stay within the desired maximal range
+            self.d = np.clip(self.d, self.d_min, self.d_max)
+            self.phi = np.clip(self.phi, self.phi_min, self.phi_max)
+
 
     def __init__(self):
         # Parameters
@@ -166,12 +176,12 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
         self.sigma_phi_0 = 0.1  # Standard deviation of phi at initialization
 
         ## Prediction step noise
-        self.sigma_d = 0.001
-        self.sigma_phi = 0.002
+        self.sigma_d = 0.010   # 0.001
+        self.sigma_phi = 0.010 # 0.002
 
         ## Roughening
-        self.rough_d =  0.001
-        self.rough_phi = 0.002
+        self.rough_d =  0.010 # 0.001
+        self.rough_phi = 0.020 # 0.002
 
         ## Environment parameters
         self.linewidth_white = 0.05
@@ -251,8 +261,18 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
         
     def resample(self):
         # Sample a new set of particles
-        weights = np.array([p.weight for p in self.particles])
+        weights = np.array([p.weight for p in self.particles], dtype=np.float32)
+        # for some reason, we sometiems start with negative weights? 
+        weights -= np.min(weights)
+        if np.sum(weights) == 0:
+            # sometimes weights is all zeroes, for some reason.
+            # In this case, I guess we set the weights as all equal:
+            weights = np.ones_like(weights, dtype=np.float32)            
         probabilities = weights / np.sum(weights)
+        
+        assert np.all(probabilities >= 0), probabilities
+        assert np.isclose(np.sum(probabilities), 1.0), probabilities
+        # print("probabilities:", probabilities)
         indices_to_keep = np.random.choice(self.nb_particles, size=self.nb_particles, p=probabilities)
 
         indices_kept = set()
@@ -295,6 +315,8 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
 
         d = np.dot(weights, ds)
         phi = np.dot(weights, phis)
+
+        # print("Estimate: d:", d, " phi:", phi)
         return [d, phi]
 
     
@@ -391,9 +413,15 @@ class LaneFitlerParticle(Configurable, LaneFilterInterface):
             # if the vote lands outside of the histogram discard it
             if d_i > self.d_max or d_i < self.d_min or phi_i < self.phi_min or phi_i > self.phi_max:
                 continue
-
+            
             i = int(floor((d_i - self.d_min) / self.delta_d))
             j = int(floor((phi_i - self.phi_min) / self.delta_phi))
+
+            if i == beliefArray.shape[0]:
+                i -= 1
+            if j == beliefArray.shape[1]:
+                j -= 1
+
             beliefArray[i, j] = beliefArray[i, j] + 1  
 
         if np.linalg.norm(beliefArray) == 0:

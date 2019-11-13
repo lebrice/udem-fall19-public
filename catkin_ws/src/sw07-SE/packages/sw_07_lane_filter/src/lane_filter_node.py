@@ -18,8 +18,8 @@ class LaneFilterNode(object):
         self.active = True
         self.filter = None
 
-        self.mode = 'histogram'
-        #self.mode = 'particle'
+        # self.mode = 'histogram'
+        self.mode = 'particle'
 
         self.updateParams(None)
 
